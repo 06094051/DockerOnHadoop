@@ -1,3 +1,7 @@
+请见wiki！
+
+
+
 For the latest information about Hadoop, please visit our website at:
 
    http://hadoop.apache.org/core/

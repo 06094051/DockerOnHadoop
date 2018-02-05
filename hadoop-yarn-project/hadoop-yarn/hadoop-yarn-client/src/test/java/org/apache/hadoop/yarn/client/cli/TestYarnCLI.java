@@ -97,7 +97,7 @@ public class TestYarnCLI {
       ApplicationId applicationId = ApplicationId.newInstance(1234, 5);
       ApplicationResourceUsageReport usageReport = i == 0 ? null :
           ApplicationResourceUsageReport.newInstance(
-              2, 0, null, null, null, 123456, 4567);
+              2, 0, null, null, null, 123456, 4567, 4567);
       ApplicationReport newApplicationReport = ApplicationReport.newInstance(
           applicationId, ApplicationAttemptId.newInstance(applicationId, 1),
           "user", "queue", "appname", "host", 124, null,
@@ -126,7 +126,7 @@ public class TestYarnCLI {
       pw.println("\tRPC Port : 124");
       pw.println("\tAM Host : host");
       pw.println("\tAggregate Resource Allocation : " +
-          (i == 0 ? "N/A" : "123456 MB-seconds, 4567 vcore-seconds"));
+          (i == 0 ? "N/A" : "123456 MB-seconds, 4567 vcore-seconds, 4567 gcore-seconds"));
       pw.println("\tDiagnostics : diagnostics");
       pw.close();
       String appReportStr = baos.toString("UTF-8");

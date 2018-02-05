@@ -61,6 +61,21 @@ public abstract class ApplicationAttemptReport {
     return report;
   }
 
+  @Private
+  @Unstable
+  public static ApplicationAttemptReport newInstance(
+      ApplicationAttemptId applicationAttemptId, String host, int rpcPort,
+      String url, String oUrl, String diagnostics,
+      YarnApplicationAttemptState state, ContainerId amContainerId,
+      String tensorboardUrl, boolean resourceReady) {
+    ApplicationAttemptReport report = newInstance(applicationAttemptId, host, rpcPort,
+    url, oUrl, diagnostics,state, amContainerId);
+    report.setTensorboardUrl(tensorboardUrl);
+    report.setResourcesReady(resourceReady);
+    return report;
+  }
+
+
   /**
    * Get the <em>YarnApplicationAttemptState</em> of the application attempt.
    * 
@@ -74,6 +89,22 @@ public abstract class ApplicationAttemptReport {
   @Unstable
   public abstract void setYarnApplicationAttemptState(
       YarnApplicationAttemptState yarnApplicationAttemptState);
+
+  @Public
+  @Unstable
+  public abstract boolean isResourcesReady();
+
+  @Private
+  @Unstable
+  public abstract void setResourcesReady (boolean url);
+
+  @Public
+  @Unstable
+  public abstract String getTensorboardUrl();
+
+  @Private
+  @Unstable
+  public abstract void setTensorboardUrl(String url);
 
   /**
    * Get the <em>RPC port</em> of this attempt <code>ApplicationMaster</code>.

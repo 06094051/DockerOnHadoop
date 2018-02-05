@@ -82,13 +82,14 @@ public abstract class AbstractYarnScheduler
   protected Map<NodeId, N> nodes = new ConcurrentHashMap<NodeId, N>();
 
   // Whole capacity of the cluster
-  protected Resource clusterResource = Resource.newInstance(0, 0);
+  protected Resource clusterResource = Resource.newInstance(0, 0, 0);
 
   protected Resource minimumAllocation;
   private Resource maximumAllocation;
   private Resource configuredMaximumAllocation;
   private int maxNodeMemory = -1;
   private int maxNodeVCores = -1;
+  private int maxNodeGCores = -1;
   private final ReadLock maxAllocReadLock;
   private final WriteLock maxAllocWriteLock;
 
@@ -96,11 +97,20 @@ public abstract class AbstractYarnScheduler
   private long configuredMaximumAllocationWaitTime;
 
   protected RMContext rmContext;
-  
+
+  // 现在从 rm 的conf 中读取，从全局处理，未来可根据需要放在NM中，通过启动汇报，保存在SchedulerNode的状态信息中
+
+  protected int reserveMemoryBaseGCore = 0;
+  protected int reservevCoresBaseGCore = 0;
+  protected int reserveMemoryPerGCore = 0;
+  protected int reservevCoresPerGCore = 0;
+  // 每台节点上的最多容器
+  protected int maxContainerPerNode = 5;
+
   /*
-   * All schedulers which are inheriting AbstractYarnScheduler should use
-   * concurrent version of 'applications' map.
-   */
+     * All schedulers which are inheriting AbstractYarnScheduler should use
+     * concurrent version of 'applications' map.
+     */
   protected ConcurrentMap<ApplicationId, SchedulerApplication<T>> applications;
   protected int nmExpireInterval;
 
@@ -615,6 +625,12 @@ public abstract class AbstractYarnScheduler
           maximumAllocation.setVirtualCores(Math.min(
               configuredMaximumAllocation.getVirtualCores(), maxNodeVCores));
         }
+        int nodeGCores = totalResource.getGpuCores();
+        if (nodeGCores > maxNodeGCores) {
+          maxNodeGCores = nodeGCores;
+          maximumAllocation.setGpuCores(Math.min(
+              configuredMaximumAllocation.getGpuCores(), maxNodeGCores));
+        }
       } else {  // removed node
         if (maxNodeMemory == totalResource.getMemory()) {
           maxNodeMemory = -1;
@@ -622,9 +638,12 @@ public abstract class AbstractYarnScheduler
         if (maxNodeVCores == totalResource.getVirtualCores()) {
           maxNodeVCores = -1;
         }
+        if (maxNodeGCores == totalResource.getGpuCores()) {
+          maxNodeGCores = -1;
+        }
         // We only have to iterate through the nodes if the current max memory
         // or vcores was equal to the removed node's
-        if (maxNodeMemory == -1 || maxNodeVCores == -1) {
+        if (maxNodeMemory == -1 || maxNodeVCores == -1 || maxNodeGCores == -1) {
           for (Map.Entry<NodeId, N> nodeEntry : nodes.entrySet()) {
             int nodeMemory =
                 nodeEntry.getValue().getTotalResource().getMemory();
@@ -635,6 +654,11 @@ public abstract class AbstractYarnScheduler
                 nodeEntry.getValue().getTotalResource().getVirtualCores();
             if (nodeVCores > maxNodeVCores) {
               maxNodeVCores = nodeVCores;
+            }
+            int nodeGCores =
+                nodeEntry.getValue().getTotalResource().getGpuCores();
+            if (nodeGCores > maxNodeGCores) {
+              maxNodeGCores = nodeGCores;
             }
           }
           if (maxNodeMemory == -1) {  // no nodes
@@ -648,6 +672,12 @@ public abstract class AbstractYarnScheduler
           } else {
             maximumAllocation.setVirtualCores(
                 Math.min(configuredMaximumAllocation.getVirtualCores(), maxNodeVCores));
+          }
+          if (maxNodeGCores == -1) {  // no nodes
+            maximumAllocation.setGpuCores(configuredMaximumAllocation.getGpuCores());
+          } else {
+            maximumAllocation.setGpuCores(
+                Math.min(configuredMaximumAllocation.getGpuCores(), maxNodeGCores));
           }
         }
       }
@@ -668,7 +698,11 @@ public abstract class AbstractYarnScheduler
       if (maxNodeVCores != -1) {
         maxVcores = Math.min(maxVcores, maxNodeVCores);
       }
-      maximumAllocation = Resources.createResource(maxMemory, maxVcores);
+      int maxGcores = newMaxAlloc.getGpuCores();
+      if (maxNodeGCores != -1) {
+        maxGcores = Math.min(maxGcores, maxNodeGCores);
+      }
+      maximumAllocation = Resources.createResource(maxMemory, maxVcores, maxGcores);
     } finally {
       maxAllocWriteLock.unlock();
     }
@@ -681,5 +715,25 @@ public abstract class AbstractYarnScheduler
       return attempt.getAppSchedulingInfo().getAllResourceRequests();
     }
     return null;
+  }
+
+  public int getReserveMemoryPerGCore() {
+    return reserveMemoryPerGCore;
+  }
+
+  public int getReservevCoresPerGCore() {
+    return reservevCoresPerGCore;
+  }
+
+  public int getReserveMemoryBaseGCore() {
+    return reserveMemoryBaseGCore;
+  }
+
+  public int getReservevCoresBaseGCore() {
+    return reservevCoresBaseGCore;
+  }
+
+  public int getMaxContainerPerNode() {
+    return maxContainerPerNode;
   }
 }

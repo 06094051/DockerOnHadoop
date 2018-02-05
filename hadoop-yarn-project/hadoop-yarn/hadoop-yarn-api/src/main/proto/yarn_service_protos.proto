@@ -89,9 +89,20 @@ message AllocateResponseProto {
   optional hadoop.common.TokenProto am_rm_token = 12;
 }
 
+message UpdateTBUrlRequestProto{
+    optional ApplicationIdProto application_id = 1;
+    optional string tensorboardUrl = 2;
+}
+
+message UpdateTBUrlResponseProto{
+    optional ApplicationIdProto application_id = 1;
+    optional string tensorboardUrl = 2;
+}
+
 enum SchedulerResourceTypes {
   MEMORY = 0;
   CPU = 1;
+  GPU = 2;
 }
 
 //////////////////////////////////////////////////////

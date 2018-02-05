@@ -148,6 +148,7 @@ public class ResourceLocalizationService extends CompositeService
   private InetSocketAddress localizationServerAddress;
   private long cacheTargetSize;
   private long cacheCleanupPeriod;
+  private long cleanupImagesTempDirPeriod;
 
   private final ContainerExecutor exec;
   protected final Dispatcher dispatcher;
@@ -245,6 +246,8 @@ public class ResourceLocalizationService extends CompositeService
       conf.getLong(YarnConfiguration.NM_LOCALIZER_CACHE_TARGET_SIZE_MB, YarnConfiguration.DEFAULT_NM_LOCALIZER_CACHE_TARGET_SIZE_MB) << 20;
     cacheCleanupPeriod =
       conf.getLong(YarnConfiguration.NM_LOCALIZER_CACHE_CLEANUP_INTERVAL_MS, YarnConfiguration.DEFAULT_NM_LOCALIZER_CACHE_CLEANUP_INTERVAL_MS);
+    cleanupImagesTempDirPeriod =
+        conf.getLong(YarnConfiguration.NM_LOCALIZER_CLEANUP_IMAGE_TMPDIR_INTERVAL_MS, YarnConfiguration.DEFAULT_NM_LOCALIZER_CLEANUP_IMAGE_TMPDIR_INTERVAL_MS);
     localizationServerAddress = conf.getSocketAddr(
         YarnConfiguration.NM_BIND_HOST,
         YarnConfiguration.NM_LOCALIZER_ADDRESS,
@@ -334,6 +337,10 @@ public class ResourceLocalizationService extends CompositeService
   public void serviceStart() throws Exception {
     cacheCleanup.scheduleWithFixedDelay(new CacheCleanup(dispatcher),
         cacheCleanupPeriod, cacheCleanupPeriod, TimeUnit.MILLISECONDS);
+
+    cacheCleanup.scheduleWithFixedDelay(new CleanUpImageTempDir(dispatcher),
+        cleanupImagesTempDirPeriod, cleanupImagesTempDirPeriod, TimeUnit.MILLISECONDS);
+
     server = createServer();
     server.start();
     localizationServerAddress =
@@ -404,11 +411,24 @@ public class ResourceLocalizationService extends CompositeService
       handleDestroyApplicationResources(
           ((ApplicationLocalizationEvent)event).getApplication());
       break;
+      case CLEANUP_IMAGE_TEMPDIR:
+        handleCleanUpImagesAndTempDir();
+      break;
     default:
       throw new YarnRuntimeException("Unknown localization event: " + event);
     }
   }
-  
+
+  private void handleCleanUpImagesAndTempDir(){
+    //定时删除节点一天没有运行的用户的临时目录，和当前节点镜像超过10个时，清楚用户镜像（听过Config.User镜像变量）
+    try {
+      LOG.info("clean up image and temp dir.");
+      delService.getExec().cleanUpImagesAndTmpDir();
+    }catch (Exception e){
+      LOG.info("clean up image and temp dir failed.", e);
+    }
+  }
+
   /**
    * Handle event received the first time any container is scheduled
    * by a given application.
@@ -438,7 +458,7 @@ public class ResourceLocalizationService extends CompositeService
   private void handleInitContainerResources(
       ContainerLocalizationRequestEvent rsrcReqs) {
     Container c = rsrcReqs.getContainer();
-    // create a loading cache for the file statuses
+     // create a loading cache for the file statuses
     LoadingCache<Path,Future<FileStatus>> statCache =
         CacheBuilder.newBuilder().build(FSDownload.createStatusCacheLoader(getConfig()));
     LocalizerContext ctxt = new LocalizerContext(
@@ -452,7 +472,7 @@ public class ResourceLocalizationService extends CompositeService
               c.getContainerId().getApplicationAttemptId()
                   .getApplicationId());
       for (LocalResourceRequest req : e.getValue()) {
-        tracker.handle(new ResourceRequestEvent(req, e.getKey(), ctxt));
+        tracker.handle(new ResourceRequestEvent(req, e.getKey(), ctxt, c));
       }
     }
   }
@@ -699,6 +719,7 @@ public class ResourceLocalizationService extends CompositeService
         // 0) find running localizer or start new thread
         LocalizerResourceRequestEvent req =
           (LocalizerResourceRequestEvent)event;
+        LOG.info( req.getContainer() + " localizer resource " + req.getVisibility());
         switch (req.getVisibility()) {
         case PUBLIC:
           publicLocalizer.addResource(req);
@@ -709,7 +730,7 @@ public class ResourceLocalizationService extends CompositeService
             LocalizerRunner localizer = privLocalizers.get(locId);
             if (null == localizer) {
               LOG.info("Created localizer for " + locId);
-              localizer = new LocalizerRunner(req.getContext(), locId);
+              localizer = new LocalizerRunner(req.getContext(), locId, req.getContainer());
               privLocalizers.put(locId, localizer);
               localizer.start();
             }
@@ -900,19 +921,25 @@ public class ResourceLocalizationService extends CompositeService
     final List<LocalizerResourceRequestEvent> pending;
     private AtomicBoolean killContainerLocalizer = new AtomicBoolean(false);
 
+    final Container container;
     // TODO: threadsafe, use outer?
     private final RecordFactory recordFactory =
       RecordFactoryProvider.getRecordFactory(getConfig());
 
     LocalizerRunner(LocalizerContext context, String localizerId) {
+      this(context, localizerId, null);
+    }
+
+    LocalizerRunner(LocalizerContext context, String localizerId, Container container) {
       super("LocalizerRunner for " + localizerId);
       this.context = context;
       this.localizerId = localizerId;
       this.pending =
           Collections
-            .synchronizedList(new ArrayList<LocalizerResourceRequestEvent>());
+              .synchronizedList(new ArrayList<LocalizerResourceRequestEvent>());
       this.scheduled =
           new HashMap<LocalResourceRequest, LocalizerResourceRequestEvent>();
+      this.container = container;
     }
 
     public void addResource(LocalizerResourceRequestEvent request) {
@@ -1110,7 +1137,7 @@ public class ResourceLocalizationService extends CompositeService
         List<String> localDirs = getInitializedLocalDirs();
         List<String> logDirs = getInitializedLogDirs();
         if (dirsHandler.areDisksHealthy()) {
-          exec.startLocalizer(nmPrivateCTokensPath, localizationServerAddress,
+          exec.startLocalizer(this.container, nmPrivateCTokensPath, localizationServerAddress,
               context.getUser(),
               ConverterUtils.toString(
                   context.getContainerId().
@@ -1231,6 +1258,26 @@ public class ResourceLocalizationService extends CompositeService
 
   }
 
+
+  static class CleanUpImageTempDir extends Thread {
+
+    private final Dispatcher dispatcher;
+
+    public CleanUpImageTempDir(Dispatcher dispatcher) {
+      super("CleanUpImageTempDir");
+      this.dispatcher = dispatcher;
+    }
+
+    @Override
+    @SuppressWarnings("unchecked") // dispatcher not typed
+    public void run() {
+      dispatcher.getEventHandler().handle(
+          new LocalizationEvent(LocalizationEventType.CLEANUP_IMAGE_TEMPDIR));
+    }
+
+  }
+
+
   private void initializeLocalDirs(FileContext lfs) {
     List<String> localDirs = dirsHandler.getLocalDirs();
     for (String localDir : localDirs) {
@@ -1305,12 +1352,13 @@ public class ResourceLocalizationService extends CompositeService
 
   private void cleanUpLocalDir(FileContext lfs, DeletionService del,
       String localDir) {
+
     long currentTimeStamp = System.currentTimeMillis();
-    renameLocalDir(lfs, localDir, ContainerLocalizer.USERCACHE,
+    this.exec.renameLocalDirForCleanUp(lfs, localDir, ContainerLocalizer.USERCACHE,
       currentTimeStamp);
-    renameLocalDir(lfs, localDir, ContainerLocalizer.FILECACHE,
+    this.exec.renameLocalDirForCleanUp(lfs, localDir, ContainerLocalizer.FILECACHE,
       currentTimeStamp);
-    renameLocalDir(lfs, localDir, ResourceLocalizationService.NM_PRIVATE_DIR,
+    this.exec.renameLocalDirForCleanUp(lfs, localDir, ResourceLocalizationService.NM_PRIVATE_DIR,
       currentTimeStamp);
     try {
       deleteLocalDir(lfs, del, localDir);
@@ -1320,6 +1368,7 @@ public class ResourceLocalizationService extends CompositeService
     }
   }
 
+  // 已经移动到ContainerExecutor，使得SecureDockerContainerExecutor的情况 作为executor的时候能移动文件夹，并且将文件夹的所有者设置为sankuai（启动hadoop的用户）
   private void renameLocalDir(FileContext lfs, String localDir,
       String localSubDir, long currentTimeStamp) {
     try {
@@ -1337,6 +1386,7 @@ public class ResourceLocalizationService extends CompositeService
 
   private void deleteLocalDir(FileContext lfs, DeletionService del,
       String localDir) throws IOException {
+
     RemoteIterator<FileStatus> fileStatus = lfs.listStatus(new Path(localDir));
     if (fileStatus != null) {
       while (fileStatus.hasNext()) {

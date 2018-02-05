@@ -185,6 +185,10 @@ public class DeletionService extends AbstractService {
     }
   }
 
+  public ContainerExecutor getExec() {
+    return exec;
+  }
+
   public static class FileDeletionTask implements Runnable {
     public static final int INVALID_TASK_ID = -1;
     private int taskId;

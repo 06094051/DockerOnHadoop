@@ -2664,7 +2664,7 @@ public class TestRMContainerAllocator {
           request.getResponseId(),
           containersToComplete, containersToAllocate,
           Collections.<NodeReport>emptyList(),
-          Resource.newInstance(512000, 1024), null, 10, null,
+          Resource.newInstance(512000, 1024, 1024), null, 10, null,
           Collections.<NMToken>emptyList());
       containersToComplete.clear();
       containersToAllocate.clear();
@@ -2678,7 +2678,7 @@ public class TestRMContainerAllocator {
           : RMContainerAllocator.PRIORITY_MAP;
       Container container = Container.newInstance(containerId,
           NodeId.newInstance(nodeName, 1234), nodeName + ":5678",
-        Resource.newInstance(1024, 1), priority, null);
+        Resource.newInstance(1024, 1, 1), priority, null);
       containersToAllocate.add(container);
       return containerId;
     }

@@ -24,6 +24,9 @@ import org.apache.hadoop.classification.InterfaceStability.Stable;
 import org.apache.hadoop.yarn.api.ApplicationMasterProtocol;
 import org.apache.hadoop.yarn.util.Records;
 
+import java.util.List;
+import java.util.Set;
+
 /**
  * <p><code>Resource</code> models a set of computer resources in the 
  * cluster.</p>
@@ -51,12 +54,23 @@ import org.apache.hadoop.yarn.util.Records;
 @Stable
 public abstract class Resource implements Comparable<Resource> {
 
+  protected long ts = -1;
+
   @Public
   @Stable
   public static Resource newInstance(int memory, int vCores) {
+    return newInstance(memory, vCores, 0);
+  }
+
+  @Public
+  @Stable
+  public static Resource newInstance(int memory, int vCores, int gCores) {
     Resource resource = Records.newRecord(Resource.class);
     resource.setMemory(memory);
     resource.setVirtualCores(vCores);
+    resource.setGpuCores(gCores);
+    if(gCores > 0)
+      resource.ts = System.currentTimeMillis();
     return resource;
   }
 
@@ -105,12 +119,35 @@ public abstract class Resource implements Comparable<Resource> {
   @Evolving
   public abstract void setVirtualCores(int vCores);
 
+  @Public
+  @Evolving
+  public abstract int getGpuCores();
+
+  @Public
+  @Evolving
+  public abstract void setGpuCores(int gCores);
+
+
+  @Public
+  @Evolving
+  public abstract Set<Integer> getGpusInfo();
+
+  @Public
+  @Evolving
+  public abstract void setGpusInfo(Set<Integer> gpus_info);
+
   @Override
   public int hashCode() {
     final int prime = 263167;
     int result = 3571;
     result = 939769357 + getMemory(); // prime * result = 939769357 initially
     result = prime * result + getVirtualCores();
+    result = prime * result + getGpuCores();
+    result = prime * result + (int)(ts % 10000 + ts / 10000);
+    if(this.getGpusInfo() !=null && this.getGpusInfo().size() > 0)
+      for(int gpu: this.getGpusInfo()){
+        result += gpu;
+      }
     return result;
   }
 
@@ -124,14 +161,22 @@ public abstract class Resource implements Comparable<Resource> {
       return false;
     Resource other = (Resource) obj;
     if (getMemory() != other.getMemory() || 
-        getVirtualCores() != other.getVirtualCores()) {
+        getVirtualCores() != other.getVirtualCores() ||
+        getGpuCores() != other.getGpuCores()) {
       return false;
+    }
+    if(this.getGpusInfo() !=null && other.getGpusInfo() !=null ) {
+      for(int gpu: this.getGpusInfo()){
+        if(!other.getGpusInfo().contains(gpu)){
+          return false;
+        }
+      }
     }
     return true;
   }
 
   @Override
   public String toString() {
-    return "<memory:" + getMemory() + ", vCores:" + getVirtualCores() + ">";
+    return "<memory:" + getMemory() + ", vCores:" + getVirtualCores() + ", gCores:" + getGpuCores() + ", GPUSInfo:"+ getGpusInfo() + ">";
   }
 }

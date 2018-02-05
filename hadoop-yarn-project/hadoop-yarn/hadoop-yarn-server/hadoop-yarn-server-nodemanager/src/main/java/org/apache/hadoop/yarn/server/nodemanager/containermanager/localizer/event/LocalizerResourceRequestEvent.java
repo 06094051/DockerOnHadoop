@@ -18,6 +18,7 @@
 package org.apache.hadoop.yarn.server.nodemanager.containermanager.localizer.event;
 
 import org.apache.hadoop.yarn.api.records.LocalResourceVisibility;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.Container;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.localizer.LocalizedResource;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.localizer.LocalizerContext;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.localizer.ResourceLocalizationService;
@@ -33,15 +34,22 @@ public class LocalizerResourceRequestEvent extends LocalizerEvent {
   private final LocalizedResource resource;
   private final LocalResourceVisibility vis;
   private final String pattern;
+  private final Container container;
 
   public LocalizerResourceRequestEvent(LocalizedResource resource,
       LocalResourceVisibility vis, LocalizerContext context, String pattern) {
+    this(resource, vis, context, pattern, null);
+  }
+
+  public LocalizerResourceRequestEvent(LocalizedResource resource, LocalResourceVisibility vis,
+                                       LocalizerContext context, String pattern, Container container) {
     super(LocalizerEventType.REQUEST_RESOURCE_LOCALIZATION,
         ConverterUtils.toString(context.getContainerId()));
     this.vis = vis;
     this.context = context;
     this.resource = resource;
     this.pattern = pattern;
+    this.container = container;
   }
 
   public LocalizedResource getResource() {
@@ -60,4 +68,7 @@ public class LocalizerResourceRequestEvent extends LocalizerEvent {
     return pattern;
   }
 
+  public Container getContainer() {
+    return container;
+  }
 }

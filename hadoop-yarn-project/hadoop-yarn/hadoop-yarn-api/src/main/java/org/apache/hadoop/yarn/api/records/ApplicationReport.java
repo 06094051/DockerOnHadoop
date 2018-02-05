@@ -25,6 +25,7 @@ import org.apache.hadoop.classification.InterfaceStability.Unstable;
 import org.apache.hadoop.yarn.api.ApplicationClientProtocol;
 import org.apache.hadoop.yarn.util.Records;
 
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -94,7 +95,7 @@ public abstract class ApplicationReport {
   @Private
   @Unstable
   public abstract void setApplicationId(ApplicationId applicationId);
-  
+
   /**
    * Get the <code>ApplicationAttemptId</code> of the current
    * attempt of the application
@@ -103,7 +104,7 @@ public abstract class ApplicationReport {
   @Public
   @Stable
   public abstract ApplicationAttemptId getCurrentApplicationAttemptId();
-  
+
   @Private
   @Unstable
   public abstract void setCurrentApplicationAttemptId(ApplicationAttemptId applicationAttemptId);
@@ -231,7 +232,15 @@ public abstract class ApplicationReport {
   @Private
   @Unstable
   public abstract void setTrackingUrl(String url);
-  
+
+  @Public
+  @Stable
+  public abstract String getTensorboardUrl();
+
+  @Private
+  @Unstable
+  public abstract void setTensorboardUrl(String url);
+
   /**
    * Get the original not-proxied <em>tracking url</em> for the application.
    * This is intended to only be used by the proxy itself.
@@ -309,9 +318,9 @@ public abstract class ApplicationReport {
   @Private
   @Unstable
   public abstract void setProgress(float progress);
-  
+
   /**
-   * Get the application's Type 
+   * Get the application's Type
    * @return application's Type
    */
   @Public
@@ -321,6 +330,45 @@ public abstract class ApplicationReport {
   @Private
   @Unstable
   public abstract void setApplicationType(String applicationType);
+
+
+  /**
+   * Get all ResourceRequest to the application
+   *
+   * @return Application's ResourceRequest
+   */
+  @Public
+  @Stable
+  public abstract List<ResourceRequest> getResourceRequests();
+
+  @Private
+  @Unstable
+  public abstract void setResourceRequests(List<ResourceRequest> resourceRequests);
+
+  /**
+   * 是不是资源都已经分配完毕。
+   * 只是针对tensorflow 类似的情况，资源必须一次申请完毕（时间间隔比较长的分批，会导致最开始申请的分配完成，后续的还没有申请，此时list会认为都分配成功），
+   * 在RUNNING状态时，AMContainer + ExecutorContainer 的所有资源申请分配成功
+   *
+   * @return
+   */
+  @Public
+  @Stable
+  public boolean resourcesReady() {
+    YarnApplicationState state = getYarnApplicationState();
+    if (state != YarnApplicationState.RUNNING) {
+      return false;
+    }
+    List<ResourceRequest> list = getResourceRequests();
+    if (list == null || list.size() < 2)
+      return false;
+    for (ResourceRequest rr : list) {
+      if (rr.getNumContainers() > 0)
+        return false;
+    }
+    return true;
+  }
+
 
   /**
    * Get all tags corresponding to the application
@@ -341,7 +389,7 @@ public abstract class ApplicationReport {
   /**
    * Get the AMRM token of the application.
    * <p>
-   * The AMRM token is required for AM to RM scheduling operations. For 
+   * The AMRM token is required for AM to RM scheduling operations. For
    * managed Application Masters Yarn takes care of injecting it. For unmanaged
    * Applications Masters, the token must be obtained via this method and set
    * in the {@link org.apache.hadoop.security.UserGroupInformation} of the
@@ -355,11 +403,11 @@ public abstract class ApplicationReport {
    *   <li>the application master is in ACCEPTED state</li>
    * </ul>
    * Else this method returns NULL.
-   * 
+   *
    * @return the AM to RM token if available.
    */
   @Public
   @Stable
   public abstract Token getAMRMToken();
-  
+
 }

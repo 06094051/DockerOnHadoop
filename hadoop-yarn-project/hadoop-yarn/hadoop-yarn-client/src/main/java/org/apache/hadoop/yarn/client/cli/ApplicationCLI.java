@@ -38,6 +38,7 @@ import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.classification.InterfaceStability.Unstable;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.ToolRunner;
+import org.apache.hadoop.yarn.api.protocolrecords.UpdateTBUrlRequest;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptReport;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ApplicationReport;
@@ -57,10 +58,10 @@ import com.google.common.annotations.VisibleForTesting;
 @Unstable
 public class ApplicationCLI extends YarnCLI {
   private static final String APPLICATIONS_PATTERN = 
-    "%30s\t%20s\t%20s\t%10s\t%10s\t%18s\t%18s\t%15s\t%35s"
+    "%30s\t%20s\t%20s\t%10s\t%10s\t%18s\t%18s\t%15s\t%15s\t%35s\t%35s"
       + System.getProperty("line.separator");
   private static final String APPLICATION_ATTEMPTS_PATTERN =
-    "%30s\t%20s\t%35s\t%35s"
+    "%30s\t%20s\t%35s\t%15s\t%35s\t%35s"
       + System.getProperty("line.separator");
   private static final String CONTAINER_PATTERN = 
     "%30s\t%20s\t%20s\t%20s\t%20s\t%20s\t%35s"
@@ -98,6 +99,7 @@ public class ApplicationCLI extends YarnCLI {
           + "based on application type, "
           + "and -appStates to filter applications based on application state.");
       opts.addOption(KILL_CMD, true, "Kills the application.");
+      opts.addOption(TBURL_CMD, true, "add tensorboard url.");
       opts.addOption(MOVE_TO_QUEUE_CMD, true, "Moves the application to a "
           + "different queue.");
       opts.addOption(QUEUE_CMD, true, "Works with the movetoqueue command to"
@@ -118,6 +120,7 @@ public class ApplicationCLI extends YarnCLI {
       appStateOpt.setArgName("States");
       opts.addOption(appStateOpt);
       opts.getOption(KILL_CMD).setArgName("Application ID");
+      opts.getOption(TBURL_CMD).setArgName("TensorBoard URL");
       opts.getOption(MOVE_TO_QUEUE_CMD).setArgName("Application ID");
       opts.getOption(QUEUE_CMD).setArgName("Queue Name");
       opts.getOption(STATUS_CMD).setArgName("Application ID");
@@ -225,6 +228,17 @@ public class ApplicationCLI extends YarnCLI {
       }
       try{
         killApplication(cliParser.getOptionValue(KILL_CMD));
+      } catch (ApplicationNotFoundException e) {
+        return exitCode;
+      }
+    } else if (cliParser.hasOption(TBURL_CMD)) {
+      if (args.length != 3) {
+        printUsage(title, opts);
+        return exitCode;
+      }
+      try{
+        String tbargs = cliParser.getOptionValue(TBURL_CMD);
+        updateTBUrl(tbargs.split("=")[0], tbargs.split("=")[1]);
       } catch (ApplicationNotFoundException e) {
         return exitCode;
       }
@@ -406,7 +420,7 @@ public class ApplicationCLI extends YarnCLI {
         + appsReport.size());
     writer.printf(APPLICATIONS_PATTERN, "Application-Id", "Application-Name",
         "Application-Type", "User", "Queue", "State", "Final-State",
-        "Progress", "Tracking-URL");
+        "Progress", "ResourcesReady", "Tracking-URL", "TensorBoardUrl");
     for (ApplicationReport appReport : appsReport) {
       DecimalFormat formatter = new DecimalFormat("###.##%");
       String progress = formatter.format(appReport.getProgress());
@@ -414,8 +428,8 @@ public class ApplicationCLI extends YarnCLI {
           appReport.getName(), appReport.getApplicationType(), appReport
               .getUser(), appReport.getQueue(), appReport
               .getYarnApplicationState(),
-          appReport.getFinalApplicationStatus(), progress, appReport
-              .getOriginalTrackingUrl());
+          appReport.getFinalApplicationStatus(), progress, appReport.resourcesReady(),
+          appReport.getOriginalTrackingUrl(), appReport.getTensorboardUrl());
     }
     writer.flush();
   }
@@ -446,6 +460,27 @@ public class ApplicationCLI extends YarnCLI {
     } else {
       sysout.println("Killing application " + applicationId);
       client.killApplication(appId);
+    }
+  }
+
+  private void updateTBUrl(String applicationId, String url) throws YarnException, IOException{
+    ApplicationId appId = ConverterUtils.toApplicationId(applicationId);
+    ApplicationReport  appReport = null;
+    try {
+      appReport = client.getApplicationReport(appId);
+    } catch (ApplicationNotFoundException e) {
+      sysout.println("Application with id '" + applicationId +
+          "' doesn't exist in RM.");
+      throw e;
+    }
+
+    if (appReport.getYarnApplicationState() == YarnApplicationState.FINISHED
+        || appReport.getYarnApplicationState() == YarnApplicationState.KILLED
+        || appReport.getYarnApplicationState() == YarnApplicationState.FAILED) {
+      sysout.println("Application " + applicationId + " has already finished ");
+    } else {
+      UpdateTBUrlRequest request = UpdateTBUrlRequest.newInstance(appId, url);
+      client.updateApplicationTBUrl(request);
     }
   }
 
@@ -527,6 +562,7 @@ public class ApplicationCLI extends YarnCLI {
         //completed app report in the timeline server doesn't have usage report
         appReportStr.print(usageReport.getMemorySeconds() + " MB-seconds, ");
         appReportStr.println(usageReport.getVcoreSeconds() + " vcore-seconds");
+        appReportStr.println(usageReport.getGcoreSeconds() + " gcore-seconds");
       } else {
         appReportStr.println("N/A");
       }
@@ -572,12 +608,13 @@ public class ApplicationCLI extends YarnCLI {
     writer.println("Total number of application attempts " + ":"
         + appAttemptsReport.size());
     writer.printf(APPLICATION_ATTEMPTS_PATTERN, "ApplicationAttempt-Id",
-        "State", "AM-Container-Id", "Tracking-URL");
+        "State", "AM-Container-Id", "ResourcesReady", "Tracking-URL", "Tensorboard-URL");
     for (ApplicationAttemptReport appAttemptReport : appAttemptsReport) {
       writer.printf(APPLICATION_ATTEMPTS_PATTERN, appAttemptReport
           .getApplicationAttemptId(), appAttemptReport
           .getYarnApplicationAttemptState(), appAttemptReport
-          .getAMContainerId().toString(), appAttemptReport.getTrackingUrl());
+          .getAMContainerId().toString(), appAttemptReport.isResourcesReady(),
+          appAttemptReport.getTrackingUrl(), appAttemptReport.getTensorboardUrl());
     }
     writer.flush();
   }

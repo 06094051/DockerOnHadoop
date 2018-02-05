@@ -18,15 +18,7 @@
 package org.apache.hadoop.fs.http.server;
 
 import org.apache.hadoop.classification.InterfaceAudience;
-import org.apache.hadoop.fs.ContentSummary;
-import org.apache.hadoop.fs.FileChecksum;
-import org.apache.hadoop.fs.FileStatus;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.GlobFilter;
-import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.fs.PathFilter;
-import org.apache.hadoop.fs.XAttrCodec;
-import org.apache.hadoop.fs.XAttrSetFlag;
+import org.apache.hadoop.fs.*;
 import org.apache.hadoop.fs.http.client.HttpFSFileSystem;
 import org.apache.hadoop.fs.permission.AclEntry;
 import org.apache.hadoop.fs.permission.AclStatus;
@@ -38,6 +30,7 @@ import org.apache.hadoop.util.StringUtils;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -479,6 +472,36 @@ public class FSOperations {
 
   }
 
+  @InterfaceAudience.Private
+  public static class FSHomeUtils implements FileSystemAccess.FileSystemExecutor<Map>, PathFilter {
+    private Path path;
+    private PathFilter filter;
+
+    public FSHomeUtils(String filter) throws IOException {
+      this.path = new Path("/user");
+      this.filter = (filter == null) ? this : new GlobFilter(filter);
+    }
+
+    @Override
+    public Map execute(FileSystem fs) throws IOException {
+      Map response = new LinkedHashMap();
+      FileStatus[] fileStatuses = fs.listStatus(path, filter);
+      for (FileStatus fileStatus: fileStatuses) {
+        if (fileStatus.isDirectory()) {
+          ContentSummary contentSummary = fs.getContentSummary(fileStatus.getPath());
+          fileStatus.getOwner();
+          response.put(fileStatus.getOwner(), contentSummary.getSpaceConsumed());
+        }
+      }
+      return response;
+    }
+
+    @Override
+    public boolean accept(Path path) {
+      return true;
+    }
+  }
+
   /**
    * Executor that performs a create FileSystemAccess files system operation.
    */
@@ -574,6 +597,27 @@ public class FSOperations {
           StringUtils.toLowerCase(HttpFSFileSystem.DELETE_JSON), deleted);
     }
 
+  }
+
+  @InterfaceAudience.Private
+  public static class FSCleanDir implements FileSystemAccess.FileSystemExecutor<JSONObject> {
+    private Path path;
+
+    public FSCleanDir(String path) {
+      this.path = new Path(path);
+    }
+
+    @Override
+    public JSONObject execute(FileSystem fs) throws IOException {
+      if (fs.isDirectory(path)) {
+        FileStatus[] fileStatuses = fs.listStatus(path);
+        for (FileStatus fileStatus: fileStatuses) {
+          fs.delete(fileStatus.getPath(), true);
+        }
+      }
+      return toJSON(
+              StringUtils.toLowerCase(HttpFSFileSystem.DELETE_JSON), true);
+    }
   }
 
   /**
@@ -753,6 +797,33 @@ public class FSOperations {
 
   }
 
+  @InterfaceAudience.Private
+  public static class FSInitUserHome implements FileSystemAccess.FileSystemExecutor<JSONObject> {
+
+    private Path path;
+    private short permission;
+    private String owner;
+    private String group;
+
+    public FSInitUserHome(String path, short permission, String owner, String group) {
+      this.path = new Path(path);
+      this.permission = permission;
+      this.owner = owner;
+      this.group = group;
+    }
+
+    @Override
+    public JSONObject execute(FileSystem fs) throws IOException {
+      FsPermission fsPermission = new FsPermission(permission);
+      boolean mkdirs = false;
+      if(!fs.exists(path)) {
+        mkdirs = fs.mkdirs(path, fsPermission);
+        fs.setOwner(path, owner, group);
+      }
+      return toJSON(HttpFSFileSystem.MKDIRS_JSON, mkdirs);
+    }
+  }
+
   /**
    * Executor that performs a open FileSystemAccess files system operation.
    */
@@ -784,6 +855,25 @@ public class FSOperations {
       return fs.open(path, bufferSize);
     }
 
+  }
+
+  @InterfaceAudience.Private
+  public static class FSCopy implements FileSystemAccess.FileSystemExecutor<JSONObject> {
+    private Path path;
+    private Path toPath;
+    private boolean overwrite;
+
+    public FSCopy(String path, String toPath, boolean overwrite) {
+      this.path = new Path(path);
+      this.toPath = new Path(toPath);
+      this.overwrite = overwrite;
+    }
+
+    @Override
+    public JSONObject execute(FileSystem fs) throws IOException {
+      boolean copied = FileUtil.copy(fs, path, fs, toPath, false, overwrite, fs.getConf());
+      return toJSON(HttpFSFileSystem.RENAME_JSON, copied);
+    }
   }
 
   /**

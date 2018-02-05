@@ -29,6 +29,11 @@
       <fileMode>0755</fileMode>
     </fileSet>
     <fileSet>
+      <directory>hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-nodemanager/target/pyinstaller/dist</directory>
+      <outputDirectory>bin</outputDirectory>
+      <fileMode>0755</fileMode>
+    </fileSet>
+    <fileSet>
       <directory>hadoop-yarn/bin</directory>
       <outputDirectory>bin</outputDirectory>
       <includes>

@@ -46,6 +46,19 @@ public abstract class ResourceCalculator {
     return (a / b) * b;
   }
 
+  public static int roundUpWithZero(int a, int b) {
+    if (b == 0) {
+      return a;
+    }
+    return ((a + (b - 1)) / b) * b;
+  }
+
+  public static int roundDownWithZero(int a, int b) {
+    if (b==0) {
+      return a;
+    }
+    return roundDown(a, b);
+  }
   /**
    * Compute the number of containers which can be allocated given
    * <code>available</code> and <code>required</code> resources.

@@ -103,9 +103,10 @@ public class RetriableFileCopyCommand extends RetriableCommand {
       Mapper.Context context, EnumSet<FileAttribute> fileAttributes)
       throws IOException {
     final boolean toAppend = action == FileAction.APPEND;
-    Path targetPath = toAppend ? target : getTmpFile(target, context);
     final Configuration configuration = context.getConfiguration();
     FileSystem targetFS = target.getFileSystem(configuration);
+    final boolean toS3Target = targetFS.getScheme().startsWith("s3");
+    Path targetPath = toAppend ? target : toS3Target ? target : getTmpFile(target, context);
 
     try {
       if (LOG.isDebugEnabled()) {
@@ -132,7 +133,7 @@ public class RetriableFileCopyCommand extends RetriableCommand {
       }
       // it's not append case, thus we first write to a temporary file, rename
       // it to the target path.
-      if (!toAppend) {
+      if (!toAppend && !toS3Target) {
         promoteTmpToTarget(targetPath, target, targetFS);
       }
       return bytesRead;
@@ -140,7 +141,7 @@ public class RetriableFileCopyCommand extends RetriableCommand {
       // note that for append case, it is possible that we append partial data
       // and then fail. In that case, for the next retry, we either reuse the
       // partial appended data if it is good or we overwrite the whole file
-      if (!toAppend && targetFS.exists(targetPath)) {
+      if (!toAppend && !toS3Target && targetFS.exists(targetPath)) {
         targetFS.delete(targetPath, false);
       }
     }

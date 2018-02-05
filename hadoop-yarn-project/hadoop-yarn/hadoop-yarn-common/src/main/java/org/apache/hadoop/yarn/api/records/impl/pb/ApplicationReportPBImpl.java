@@ -21,25 +21,12 @@ package org.apache.hadoop.yarn.api.records.impl.pb;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.classification.InterfaceStability.Unstable;
 import org.apache.hadoop.security.proto.SecurityProtos.TokenProto;
-import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
-import org.apache.hadoop.yarn.api.records.ApplicationId;
-import org.apache.hadoop.yarn.api.records.ApplicationReport;
-import org.apache.hadoop.yarn.api.records.ApplicationResourceUsageReport;
-import org.apache.hadoop.yarn.api.records.FinalApplicationStatus;
-import org.apache.hadoop.yarn.api.records.Token;
-import org.apache.hadoop.yarn.api.records.YarnApplicationState;
-import org.apache.hadoop.yarn.proto.YarnProtos.ApplicationAttemptIdProto;
-import org.apache.hadoop.yarn.proto.YarnProtos.ApplicationIdProto;
-import org.apache.hadoop.yarn.proto.YarnProtos.ApplicationReportProto;
-import org.apache.hadoop.yarn.proto.YarnProtos.ApplicationReportProtoOrBuilder;
-import org.apache.hadoop.yarn.proto.YarnProtos.ApplicationResourceUsageReportProto;
-import org.apache.hadoop.yarn.proto.YarnProtos.FinalApplicationStatusProto;
-import org.apache.hadoop.yarn.proto.YarnProtos.YarnApplicationStateProto;
+import org.apache.hadoop.yarn.api.records.*;
+import org.apache.hadoop.yarn.proto.YarnProtos.*;
 
 import com.google.protobuf.TextFormat;
 
-import java.util.HashSet;
-import java.util.Set;
+import java.util.*;
 
 @Private
 @Unstable
@@ -53,6 +40,7 @@ public class ApplicationReportPBImpl extends ApplicationReport {
   private Token clientToAMToken = null;
   private Token amRmToken = null;
   private Set<String> applicationTags = null;
+  private List<ResourceRequest> resourceRequests = null;
 
   public ApplicationReportPBImpl() {
     builder = ApplicationReportProto.newBuilder();
@@ -61,6 +49,20 @@ public class ApplicationReportPBImpl extends ApplicationReport {
   public ApplicationReportPBImpl(ApplicationReportProto proto) {
     this.proto = proto;
     viaProto = true;
+  }
+
+  @Override
+  public List<ResourceRequest> getResourceRequests() {
+    initResourceRequests();
+    return this.resourceRequests;
+  }
+
+  @Override
+  public void setResourceRequests(List<ResourceRequest> resourceRequests) {
+    if (null == this.resourceRequests) {
+      builder.clearResourceRequests();
+    }
+    this.resourceRequests = resourceRequests;
   }
 
   @Override
@@ -85,7 +87,7 @@ public class ApplicationReportPBImpl extends ApplicationReport {
     }
     builder.setAppResourceUsage(convertToProtoFormat(appInfo));
   }
-  
+
   @Override
   public ApplicationAttemptId getCurrentApplicationAttemptId() {
     if (this.currentApplicationAttemptId != null) {
@@ -110,6 +112,15 @@ public class ApplicationReportPBImpl extends ApplicationReport {
   }
 
   @Override
+  public String getTensorboardUrl() {
+    ApplicationReportProtoOrBuilder p = viaProto ? proto : builder;
+    if (!p.hasTensorboardUrl()) {
+      return null;
+    }
+    return p.getTensorboardUrl();
+  }
+
+  @Override
   public String getTrackingUrl() {
     ApplicationReportProtoOrBuilder p = viaProto ? proto : builder;
     if (!p.hasTrackingUrl()) {
@@ -126,7 +137,7 @@ public class ApplicationReportPBImpl extends ApplicationReport {
     }
     return p.getOriginalTrackingUrl();
   }
-  
+
   @Override
   public String getName() {
     ApplicationReportProtoOrBuilder p = viaProto ? proto : builder;
@@ -217,7 +228,7 @@ public class ApplicationReportPBImpl extends ApplicationReport {
     ApplicationReportProtoOrBuilder p = viaProto ? proto : builder;
     if (!p.hasFinalApplicationStatus()) {
       return null;
-    }	
+    }
     return convertFromProtoFormat(p.getFinalApplicationStatus());
   }
 
@@ -247,6 +258,19 @@ public class ApplicationReportPBImpl extends ApplicationReport {
     }
     amRmToken = convertFromProtoFormat(p.getAmRmToken());
     return amRmToken;
+  }
+
+  private void initResourceRequests() {
+    if (resourceRequests != null) {
+      return;
+    }
+    ApplicationReportProtoOrBuilder p = viaProto ? proto : builder;
+    List<ResourceRequestProto> list = p.getResourceRequestsList();
+    resourceRequests = new ArrayList<ResourceRequest>();
+
+    for (ResourceRequestProto rr : list) {
+      resourceRequests.add(convertFromProtoFormat(rr));
+    }
   }
 
   private void initApplicationTags() {
@@ -281,6 +305,16 @@ public class ApplicationReportPBImpl extends ApplicationReport {
   }
 
   @Override
+  public void setTensorboardUrl(String url) {
+    maybeInitBuilder();
+    if (url == null) {
+      builder.clearTensorboardUrl();
+      return;
+    }
+    builder.setTensorboardUrl(url);
+  }
+
+  @Override
   public void setTrackingUrl(String url) {
     maybeInitBuilder();
     if (url == null) {
@@ -289,7 +323,7 @@ public class ApplicationReportPBImpl extends ApplicationReport {
     }
     builder.setTrackingUrl(url);
   }
-  
+
   @Override
   public void setOriginalTrackingUrl(String url) {
     maybeInitBuilder();
@@ -349,7 +383,7 @@ public class ApplicationReportPBImpl extends ApplicationReport {
   @Override
   public void setClientToAMToken(Token clientToAMToken) {
     maybeInitBuilder();
-    if (clientToAMToken == null) 
+    if (clientToAMToken == null)
       builder.clearClientToAmToken();
     this.clientToAMToken = clientToAMToken;
   }
@@ -363,7 +397,7 @@ public class ApplicationReportPBImpl extends ApplicationReport {
     }
     builder.setUser((user));
   }
-  
+
   @Override
   public void setApplicationType(String applicationType) {
     maybeInitBuilder();
@@ -482,6 +516,45 @@ public class ApplicationReportPBImpl extends ApplicationReport {
       builder.clearApplicationTags();
       builder.addAllApplicationTags(this.applicationTags);
     }
+    if (this.resourceRequests != null){
+      addResourceRequestsToProto();
+    }
+  }
+
+  private void addResourceRequestsToProto() {
+    maybeInitBuilder();
+    builder.clearResourceRequests();
+    if (null == resourceRequests) {
+      return;
+    }
+    Iterable<ResourceRequestProto> iterable =
+        new Iterable<ResourceRequestProto>() {
+          @Override
+          public Iterator<ResourceRequestProto> iterator() {
+            return new Iterator<ResourceRequestProto>() {
+
+              Iterator<ResourceRequest> iter = resourceRequests.iterator();
+
+              @Override
+              public boolean hasNext() {
+                return iter.hasNext();
+              }
+
+              @Override
+              public ResourceRequestProto next() {
+                return convertToProtoFormat(iter.next());
+              }
+
+              @Override
+              public void remove() {
+                throw new UnsupportedOperationException();
+
+              }
+            };
+
+          }
+        };
+    builder.addAllResourceRequests(iterable);
   }
 
   private void mergeLocalToProto() {
@@ -502,7 +575,7 @@ public class ApplicationReportPBImpl extends ApplicationReport {
   private ApplicationIdProto convertToProtoFormat(ApplicationId t) {
     return ((ApplicationIdPBImpl) t).getProto();
   }
-  
+
   private ApplicationAttemptIdProto convertToProtoFormat(ApplicationAttemptId t) {
     return ((ApplicationAttemptIdPBImpl) t).getProto();
   }
@@ -519,7 +592,7 @@ public class ApplicationReportPBImpl extends ApplicationReport {
       ApplicationIdProto applicationId) {
     return new ApplicationIdPBImpl(applicationId);
   }
-  
+
   private ApplicationAttemptIdPBImpl convertFromProtoFormat(
       ApplicationAttemptIdProto applicationAttemptId) {
     return new ApplicationAttemptIdPBImpl(applicationAttemptId);
@@ -547,5 +620,13 @@ public class ApplicationReportPBImpl extends ApplicationReport {
 
   private TokenProto convertToProtoFormat(Token t) {
     return ((TokenPBImpl)t).getProto();
+  }
+
+  private ResourceRequestProto convertToProtoFormat(ResourceRequest t) {
+    return ((ResourceRequestPBImpl)t).getProto();
+  }
+
+  private ResourceRequestPBImpl convertFromProtoFormat(ResourceRequestProto p) {
+    return new ResourceRequestPBImpl(p);
   }
 }

@@ -69,14 +69,14 @@ public class FSLeafQueue extends FSQueue {
   private Resource amResourceUsage;
 
   private final ActiveUsersManager activeUsersManager;
-  
+
   public FSLeafQueue(String name, FairScheduler scheduler,
       FSParentQueue parent) {
     super(name, scheduler, parent);
     this.lastTimeAtMinShare = scheduler.getClock().getTime();
     this.lastTimeAtFairShareThreshold = scheduler.getClock().getTime();
     activeUsersManager = new ActiveUsersManager(getMetrics());
-    amResourceUsage = Resource.newInstance(0, 0);
+    amResourceUsage = Resource.newInstance(0, 0, 0);
   }
   
   public void addApp(FSAppAttempt app, boolean runnable) {
@@ -241,9 +241,12 @@ public class FSLeafQueue extends FSQueue {
     Resource usage = Resources.createResource(0);
     readLock.lock();
     try {
-      for (FSAppAttempt app : runnableApps) {
-        Resources.addTo(usage, app.getResourceUsage());
-      }
+//      for (FSAppAttempt app : runnableApps) {
+//        Resources.addTo(usage, app.getResourceUsage());
+//      }
+
+      policy.computeUsage(usage, runnableApps);
+
       for (FSAppAttempt app : nonRunnableApps) {
         Resources.addTo(usage, app.getResourceUsage());
       }
@@ -314,6 +317,7 @@ public class FSLeafQueue extends FSQueue {
     Comparator<Schedulable> comparator = policy.getComparator();
     writeLock.lock();
     try {
+      // 资源申请好的放在队尾
       Collections.sort(runnableApps, comparator);
     } finally {
       writeLock.unlock();
@@ -327,8 +331,23 @@ public class FSLeafQueue extends FSQueue {
         if (SchedulerAppUtils.isBlacklisted(sched, node, LOG)) {
           continue;
         }
-
-        assigned = sched.assignContainer(node);
+        if(maxSkipNumApp > 0 && reservationWaitTimeMs > 0 ){
+          if(maxSkipNumApp < runnableApps.indexOf(sched)){
+            break;
+          }
+          if(SchedulerAppUtils.fitsAssignContainer(sched, node)){
+            // sched 能在 node 中分配
+            assigned = sched.assignContainer(node);
+          }else if(System.currentTimeMillis() - sched.getStartTime() > reservationWaitTimeMs){
+            // 任务如队列超过队列设置的 reservation 时间，可以reservation
+            assigned = sched.assignContainer(node);
+          }else {
+            // 任务没有到 reservation 时间，且在队列的 index 不超过 maxSkipNumApp
+            continue;
+          }
+        }else {
+          assigned = sched.assignContainer(node);
+        }
         if (!assigned.equals(Resources.none())) {
           break;
         }

@@ -24,6 +24,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import javax.xml.parsers.ParserConfigurationException;
@@ -193,6 +194,7 @@ public class QueueManager {
         queues.put(leafQueue.getName(), leafQueue);
         leafQueues.add(leafQueue);
         leafQueue.updatePreemptionVariables();
+        leafQueue.updateNodeLabels();
         return leafQueue;
       } else {
         FSParentQueue newParent = new FSParentQueue(queueName, scheduler, parent);
@@ -205,6 +207,7 @@ public class QueueManager {
         parent.addChildQueue(newParent);
         queues.put(newParent.getName(), newParent);
         newParent.updatePreemptionVariables();
+        newParent.updateNodeLabels();
         parent = newParent;
       }
     }
@@ -394,11 +397,28 @@ public class QueueManager {
             + queue.getName(), ex);
       }
     }
-
     // Update steady fair shares for all queues
     rootQueue.recomputeSteadyShares();
+    updateNodeLabels();
     // Update the fair share preemption timeouts and preemption for all queues
     // recursively
     rootQueue.updatePreemptionVariables();
+    rootQueue.resetReservationWaitTimeMs();
+    rootQueue.resetMaxSkipNumApp();
+    rootQueue.resetMaxNumReserveContainers();
   }
+
+  /**
+   * After the allocation configuration has been loaded,
+   * register the queues with the node labels manager.
+   */
+  void updateNodeLabels() {
+    Map<String, Set<String>> labelsMap = new HashMap<>();
+    for (FSQueue queue : queues.values()) {
+      labelsMap.put(queue.getName(), queue.getAccessibleNodeLabels());
+    }
+    rootQueue.updateNodeLabels();
+    scheduler.getLabelsManager().reinitializeQueueLabels(labelsMap);
+  }
+
 }

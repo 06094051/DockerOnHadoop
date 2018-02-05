@@ -17,9 +17,13 @@
 */
 package org.apache.hadoop.yarn.util.resource;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.classification.InterfaceStability.Unstable;
 import org.apache.hadoop.yarn.api.records.Resource;
+
+import java.util.Arrays;
 
 /**
  * A {@link ResourceCalculator} which uses the concept of  
@@ -45,89 +49,71 @@ import org.apache.hadoop.yarn.api.records.Resource;
 @Private
 @Unstable
 public class DominantResourceCalculator extends ResourceCalculator {
-  
+
+  private static final Log LOG = LogFactory.getLog(DominantResourceCalculator.class);
+
   @Override
   public int compare(Resource clusterResource, Resource lhs, Resource rhs) {
     
     if (lhs.equals(rhs)) {
       return 0;
     }
-    
-    if (isInvalidDivisor(clusterResource)) {
-      if ((lhs.getMemory() < rhs.getMemory() && lhs.getVirtualCores() > rhs
-          .getVirtualCores())
-          || (lhs.getMemory() > rhs.getMemory() && lhs.getVirtualCores() < rhs
-              .getVirtualCores())) {
-        return 0;
-      } else if (lhs.getMemory() > rhs.getMemory()
-          || lhs.getVirtualCores() > rhs.getVirtualCores()) {
-        return 1;
-      } else if (lhs.getMemory() < rhs.getMemory()
-          || lhs.getVirtualCores() < rhs.getVirtualCores()) {
-        return -1;
-      }
-    }
 
-    float l = getResourceAsValue(clusterResource, lhs, true);
-    float r = getResourceAsValue(clusterResource, rhs, true);
-    
-    if (l < r) {
-      return -1;
-    } else if (l > r) {
-      return 1;
-    } else {
-      l = getResourceAsValue(clusterResource, lhs, false);
-      r = getResourceAsValue(clusterResource, rhs, false);
+    float[] lValues = new float[] {
+      (clusterResource.getMemory() != 0) ? (float) lhs.getMemory() / clusterResource.getMemory() : lhs.getMemory(),
+      (clusterResource.getVirtualCores() != 0) ? (float) lhs.getVirtualCores() / clusterResource.getVirtualCores() : lhs.getVirtualCores(),
+      (clusterResource.getGpuCores() != 0) ? (float) lhs.getGpuCores() / clusterResource.getGpuCores() : 0.0f };
+    Arrays.sort(lValues);
+
+    float[] rValues = new float[] {
+      (clusterResource.getMemory() != 0) ? (float) rhs.getMemory() / clusterResource.getMemory() : rhs.getMemory(),
+      (clusterResource.getVirtualCores() != 0) ? (float) rhs.getVirtualCores() / clusterResource.getVirtualCores() : rhs.getVirtualCores(),
+      (clusterResource.getGpuCores() != 0) ? (float) rhs.getGpuCores() / clusterResource.getGpuCores() : 0.0f };
+    Arrays.sort(rValues);
+
+    int diff = 0;
+    for(int i = 0; i < 3; i++) {
+      float l = lValues[i];
+      float r = rValues[i];
       if (l < r) {
-        return -1;
+        diff = -1;
       } else if (l > r) {
-        return 1;
+        diff = 1;
       }
     }
     
-    return 0;
+    return diff;
   }
 
-  /**
-   * Use 'dominant' for now since we only have 2 resources - gives us a slight
-   * performance boost.
-   * 
-   * Once we add more resources, we'll need a more complicated (and slightly
-   * less performant algorithm).
-   */
-  protected float getResourceAsValue(
-      Resource clusterResource, Resource resource, boolean dominant) {
-    // Just use 'dominant' resource
-    return (dominant) ?
-        Math.max(
-            (float)resource.getMemory() / clusterResource.getMemory(), 
-            (float)resource.getVirtualCores() / clusterResource.getVirtualCores()
-            ) 
-        :
-          Math.min(
-              (float)resource.getMemory() / clusterResource.getMemory(), 
-              (float)resource.getVirtualCores() / clusterResource.getVirtualCores()
-              ); 
+  protected float getResourceAsValueMax( Resource clusterResource,
+      Resource resource) {
+    return Math.max((float) resource.getMemory() / clusterResource.getMemory(),
+        (float) resource.getVirtualCores() / clusterResource.getVirtualCores());
   }
-  
+
   @Override
   public int computeAvailableContainers(Resource available, Resource required) {
-    return Math.min(
-        available.getMemory() / required.getMemory(), 
+    int min = Math.min(
+        available.getMemory() / required.getMemory(),
         available.getVirtualCores() / required.getVirtualCores());
+    if (required.getGpuCores() != 0) {
+      min = Math.min(min,
+          available.getGpuCores() / required.getGpuCores());
+    }
+    return min;
   }
 
   @Override
   public float divide(Resource clusterResource, 
       Resource numerator, Resource denominator) {
     return 
-        getResourceAsValue(clusterResource, numerator, true) / 
-        getResourceAsValue(clusterResource, denominator, true);
+        getResourceAsValueMax(clusterResource, numerator) /
+        getResourceAsValueMax(clusterResource, denominator);
   }
   
   @Override
   public boolean isInvalidDivisor(Resource r) {
-    if (r.getMemory() == 0.0f || r.getVirtualCores() == 0.0f) {
+    if (r.getMemory() == 0.0f || r.getVirtualCores() == 0.0f || r.getGpuCores() == 0.0f) {
       return true;
     }
     return false;
@@ -135,17 +121,22 @@ public class DominantResourceCalculator extends ResourceCalculator {
 
   @Override
   public float ratio(Resource a, Resource b) {
-    return Math.max(
-        (float)a.getMemory()/b.getMemory(), 
-        (float)a.getVirtualCores()/b.getVirtualCores()
-        );
+    float max = Math.max(
+        (float) a.getMemory() / b.getMemory(),
+        (float) a.getVirtualCores() / b.getVirtualCores());
+    if (b.getGpuCores() != 0) {
+      max = Math.max(max,
+          (float) a.getGpuCores() / b.getGpuCores());
+    }
+    return max;
   }
 
   @Override
   public Resource divideAndCeil(Resource numerator, int denominator) {
     return Resources.createResource(
         divideAndCeil(numerator.getMemory(), denominator),
-        divideAndCeil(numerator.getVirtualCores(), denominator)
+        divideAndCeil(numerator.getVirtualCores(), denominator),
+        divideAndCeil(numerator.getGpuCores(), denominator)
         );
   }
 
@@ -162,15 +153,21 @@ public class DominantResourceCalculator extends ResourceCalculator {
         Math.max(r.getVirtualCores(), minimumResource.getVirtualCores()),
         stepFactor.getVirtualCores()),
       maximumResource.getVirtualCores());
+    int normalizedGCores = Math.min(
+      roundUpWithZero(
+        Math.max(r.getGpuCores(), minimumResource.getGpuCores()),
+        stepFactor.getGpuCores()),
+      maximumResource.getGpuCores());
     return Resources.createResource(normalizedMemory,
-      normalizedCores);
+      normalizedCores, normalizedGCores);
   }
 
   @Override
   public Resource roundUp(Resource r, Resource stepFactor) {
     return Resources.createResource(
         roundUp(r.getMemory(), stepFactor.getMemory()), 
-        roundUp(r.getVirtualCores(), stepFactor.getVirtualCores())
+        roundUp(r.getVirtualCores(), stepFactor.getVirtualCores()),
+        roundUpWithZero(r.getGpuCores(), stepFactor.getGpuCores())
         );
   }
 
@@ -178,7 +175,8 @@ public class DominantResourceCalculator extends ResourceCalculator {
   public Resource roundDown(Resource r, Resource stepFactor) {
     return Resources.createResource(
         roundDown(r.getMemory(), stepFactor.getMemory()),
-        roundDown(r.getVirtualCores(), stepFactor.getVirtualCores())
+        roundDown(r.getVirtualCores(), stepFactor.getVirtualCores()),
+        roundDownWithZero(r.getGpuCores(), stepFactor.getGpuCores())
         );
   }
 
@@ -190,7 +188,10 @@ public class DominantResourceCalculator extends ResourceCalculator {
             (int)Math.ceil(r.getMemory() * by), stepFactor.getMemory()),
         roundUp(
             (int)Math.ceil(r.getVirtualCores() * by), 
-            stepFactor.getVirtualCores())
+            stepFactor.getVirtualCores()),
+        roundUpWithZero(
+            (int)Math.ceil(r.getGpuCores() * by),
+            stepFactor.getGpuCores())
         );
   }
 
@@ -205,6 +206,10 @@ public class DominantResourceCalculator extends ResourceCalculator {
         roundDown(
             (int)(r.getVirtualCores() * by), 
             stepFactor.getVirtualCores()
+        ),
+        roundDownWithZero(
+            (int) (r.getGpuCores() * by),
+            stepFactor.getGpuCores()
             )
         );
   }

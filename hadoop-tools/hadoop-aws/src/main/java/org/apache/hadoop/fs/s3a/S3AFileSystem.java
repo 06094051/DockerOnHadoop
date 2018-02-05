@@ -40,6 +40,7 @@ import com.amazonaws.auth.AWSCredentialsProviderChain;
 
 import com.amazonaws.auth.InstanceProfileCredentialsProvider;
 import com.amazonaws.services.s3.AmazonS3Client;
+import com.amazonaws.services.s3.S3ClientOptions;
 import com.amazonaws.services.s3.model.CannedAccessControlList;
 import com.amazonaws.services.s3.model.DeleteObjectsRequest;
 import com.amazonaws.services.s3.model.ListObjectsRequest;
@@ -244,6 +245,12 @@ public class S3AFileSystem extends FileSystem {
       }
     }
 
+    boolean pathStyleAccess = conf.getBoolean(PATH_STYLE_ACCESS, false);
+    if (pathStyleAccess) {
+      LOG.debug("Enabling path style access!");
+      s3.setS3ClientOptions(new S3ClientOptions().withPathStyleAccess(true));
+    }
+
     maxKeys = conf.getInt(MAX_PAGING_KEYS, DEFAULT_MAX_PAGING_KEYS);
     partSize = conf.getLong(MULTIPART_SIZE, DEFAULT_MULTIPART_SIZE);
     multiPartThreshold = conf.getInt(MIN_MULTIPART_THRESHOLD,
@@ -269,15 +276,15 @@ public class S3AFileSystem extends FileSystem {
     }
     long keepAliveTime = conf.getLong(KEEPALIVE_TIME, DEFAULT_KEEPALIVE_TIME);
     LinkedBlockingQueue<Runnable> workQueue =
-      new LinkedBlockingQueue<>(maxThreads *
-        conf.getInt(MAX_TOTAL_TASKS, DEFAULT_MAX_TOTAL_TASKS));
+      new LinkedBlockingQueue<>(conf.getInt(MAX_TOTAL_TASKS, DEFAULT_MAX_TOTAL_TASKS));
     threadPoolExecutor = new ThreadPoolExecutor(
         coreThreads,
         maxThreads,
         keepAliveTime,
         TimeUnit.SECONDS,
         workQueue,
-        newDaemonThreadFactory("s3a-transfer-shared-"));
+        newDaemonThreadFactory("s3a-transfer-shared-"),
+        new ThreadPoolExecutor.CallerRunsPolicy());
     threadPoolExecutor.allowCoreThreadTimeOut(true);
 
     TransferManagerConfiguration transferConfiguration = new TransferManagerConfiguration();

@@ -173,14 +173,14 @@ public class BuilderUtils {
   public static NodeId newNodeId(String host, int port) {
     return NodeId.newInstance(host, port);
   }
-  
+
   public static NodeReport newNodeReport(NodeId nodeId, NodeState nodeState,
       String httpAddress, String rackName, Resource used, Resource capability,
       int numContainers, String healthReport, long lastHealthReportTime) {
     return newNodeReport(nodeId, nodeState, httpAddress, rackName, used,
         capability, numContainers, healthReport, lastHealthReportTime, null);
   }
-  
+
   public static NodeReport newNodeReport(NodeId nodeId, NodeState nodeState,
       String httpAddress, String rackName, Resource used, Resource capability,
       int numContainers, String healthReport, long lastHealthReportTime,
@@ -323,6 +323,23 @@ public class BuilderUtils {
       String url, long startTime, long finishTime,
       FinalApplicationStatus finalStatus,
       ApplicationResourceUsageReport appResources, String origTrackingUrl,
+      float progress, String appType, Token amRmToken, Set<String> tags,  List<ResourceRequest> resourceRequests,
+      String tensorboardUrl) {
+    ApplicationReport report =  newApplicationReport(applicationId, applicationAttemptId, user, queue, name, host,
+        rpcPort, clientToAMToken, state, diagnostics, url, startTime, finishTime, finalStatus, appResources,
+        origTrackingUrl, progress, appType, amRmToken, tags);
+    report.setResourceRequests(resourceRequests);
+    report.setTensorboardUrl(tensorboardUrl);
+    return report;
+  }
+
+  public static ApplicationReport newApplicationReport(
+      ApplicationId applicationId, ApplicationAttemptId applicationAttemptId,
+      String user, String queue, String name, String host, int rpcPort,
+      Token clientToAMToken, YarnApplicationState state, String diagnostics,
+      String url, long startTime, long finishTime,
+      FinalApplicationStatus finalStatus,
+      ApplicationResourceUsageReport appResources, String origTrackingUrl,
       float progress, String appType, Token amRmToken, Set<String> tags) {
     ApplicationReport report = recordFactory
         .newRecordInstance(ApplicationReport.class);
@@ -348,7 +365,7 @@ public class BuilderUtils {
     report.setApplicationTags(tags);
     return report;
   }
-  
+
   public static ApplicationSubmissionContext newApplicationSubmissionContext(
       ApplicationId applicationId, String applicationName, String queue,
       Priority priority, ContainerLaunchContext amContainer,
@@ -378,11 +395,11 @@ public class BuilderUtils {
       queue, priority, amContainer, isUnmanagedAM, cancelTokensWhenComplete,
       maxAppAttempts, resource, null);
   }
-  
+
   public static ApplicationResourceUsageReport newApplicationResourceUsageReport(
       int numUsedContainers, int numReservedContainers, Resource usedResources,
-      Resource reservedResources, Resource neededResources, long memorySeconds, 
-      long vcoreSeconds) {
+      Resource reservedResources, Resource neededResources, long memorySeconds,
+      long vcoreSeconds, long gcoreSeconds) {
     ApplicationResourceUsageReport report =
         recordFactory.newRecordInstance(ApplicationResourceUsageReport.class);
     report.setNumUsedContainers(numUsedContainers);
@@ -392,6 +409,7 @@ public class BuilderUtils {
     report.setNeededResources(neededResources);
     report.setMemorySeconds(memorySeconds);
     report.setVcoreSeconds(vcoreSeconds);
+    report.setGcoreSeconds(gcoreSeconds);
     return report;
   }
 
@@ -399,6 +417,15 @@ public class BuilderUtils {
     Resource resource = recordFactory.newRecordInstance(Resource.class);
     resource.setMemory(memory);
     resource.setVirtualCores(vCores);
+    resource.setGpuCores(0);
+    return resource;
+  }
+
+  public static Resource newResource(int memory, int vCores, int gCores) {
+    Resource resource = recordFactory.newRecordInstance(Resource.class);
+    resource.setMemory(memory);
+    resource.setVirtualCores(vCores);
+    resource.setGpuCores(gCores);
     return resource;
   }
 

@@ -97,6 +97,16 @@ public class ApplicationAttemptReportPBImpl extends ApplicationAttemptReport {
   }
 
   @Override
+  public boolean isResourcesReady(){
+    ApplicationAttemptReportProtoOrBuilder p = viaProto ? proto : builder;
+    if(!p.getResourceReady()){
+      return false;
+    }
+    return p.getResourceReady() ;
+  }
+
+
+  @Override
   public String getDiagnostics() {
     ApplicationAttemptReportProtoOrBuilder p = viaProto ? proto : builder;
     if (!p.hasDiagnostics()) {
@@ -123,6 +133,17 @@ public class ApplicationAttemptReportPBImpl extends ApplicationAttemptReport {
     }
     builder.setYarnApplicationAttemptState(convertToProtoFormat(state));
   }
+
+  @Override
+  public String getTensorboardUrl() {
+    ApplicationAttemptReportProtoOrBuilder p = viaProto ? proto : builder;
+    if (!p.hasTensorboardUrl()) {
+      return null;
+    }
+    return p.getTensorboardUrl();
+  }
+
+
 
   private YarnApplicationAttemptStateProto convertToProtoFormat(
       YarnApplicationAttemptState state) {
@@ -167,6 +188,23 @@ public class ApplicationAttemptReportPBImpl extends ApplicationAttemptReport {
       return;
     }
     builder.setTrackingUrl(url);
+  }
+
+  @Override
+  public void setTensorboardUrl(String url) {
+    maybeInitBuilder();
+    if (url == null) {
+      builder.clearTensorboardUrl();
+      return;
+    }
+    builder.setTensorboardUrl(url);
+  }
+
+  @Override
+  public void setResourcesReady (boolean resourcesReady){
+    maybeInitBuilder();
+    builder.clearResourceReady();
+    builder.setResourceReady(resourcesReady);
   }
 
   @Override

@@ -74,7 +74,9 @@ public class NodePage extends NMView {
           ._("Pmem enforcement enabled",
               info.isPmemCheckEnabled())
            ._("Total VCores allocated for Containers",
-              String.valueOf(info.getTotalVCoresAllocated())) 
+              String.valueOf(info.getTotalVCoresAllocated()))
+           ._("Total GCores allocated for Containers",
+              String.valueOf(info.getTotalGCoresAllocated()))
           ._("NodeHealthyStatus",
               info.getHealthStatus())
           ._("LastNodeHealthTime", new Date(

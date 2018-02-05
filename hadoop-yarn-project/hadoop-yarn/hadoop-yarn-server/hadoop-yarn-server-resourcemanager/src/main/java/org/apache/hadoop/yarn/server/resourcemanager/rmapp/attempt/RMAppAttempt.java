@@ -79,6 +79,8 @@ public interface RMAppAttempt extends EventHandler<RMAppAttemptEvent> {
    */
   String getTrackingUrl();
 
+  String getTensorboardUrl();
+
   /**
    * The original url at which the status of the application attempt can be 
    * accessed. This url is not fronted by a proxy. This is only intended to be

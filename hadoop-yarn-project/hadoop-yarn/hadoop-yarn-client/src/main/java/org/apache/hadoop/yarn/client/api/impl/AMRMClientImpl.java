@@ -49,15 +49,7 @@ import org.apache.hadoop.yarn.api.protocolrecords.FinishApplicationMasterRequest
 import org.apache.hadoop.yarn.api.protocolrecords.FinishApplicationMasterResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.RegisterApplicationMasterRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.RegisterApplicationMasterResponse;
-import org.apache.hadoop.yarn.api.records.ContainerId;
-import org.apache.hadoop.yarn.api.records.ContainerStatus;
-import org.apache.hadoop.yarn.api.records.FinalApplicationStatus;
-import org.apache.hadoop.yarn.api.records.NMToken;
-import org.apache.hadoop.yarn.api.records.Priority;
-import org.apache.hadoop.yarn.api.records.Resource;
-import org.apache.hadoop.yarn.api.records.ResourceBlacklistRequest;
-import org.apache.hadoop.yarn.api.records.ResourceRequest;
-import org.apache.hadoop.yarn.api.records.Token;
+import org.apache.hadoop.yarn.api.records.*;
 import org.apache.hadoop.yarn.client.ClientRMProxy;
 import org.apache.hadoop.yarn.client.api.AMRMClient;
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest;
@@ -113,18 +105,26 @@ public class AMRMClientImpl<T extends ContainerRequest> extends AMRMClient<T> {
   
   
   /**
-   * Class compares Resource by memory then cpu in reverse order
+   * Class compares Resource by memory then cpu then gpu in reverse order
    */
-  class ResourceReverseMemoryThenCpuComparator implements Comparator<Resource> {
+  class ResourceReverseMemoryThenCpuThenGpuComparator implements Comparator<Resource> {
     @Override
     public int compare(Resource arg0, Resource arg1) {
       int mem0 = arg0.getMemory();
       int mem1 = arg1.getMemory();
       int cpu0 = arg0.getVirtualCores();
       int cpu1 = arg1.getVirtualCores();
+      int gpu0 = arg0.getGpuCores();
+      int gpu1 = arg1.getGpuCores();
       if(mem0 == mem1) {
         if(cpu0 == cpu1) {
-          return 0;
+          if(gpu0 == gpu1) {
+            return 0;
+          }
+          if(gpu0 < gpu1) {
+            return 1;
+          }
+          return -1;
         }
         if(cpu0 < cpu1) {
           return 1;
@@ -143,8 +143,10 @@ public class AMRMClientImpl<T extends ContainerRequest> extends AMRMClient<T> {
     int mem1 = arg1.getMemory();
     int cpu0 = arg0.getVirtualCores();
     int cpu1 = arg1.getVirtualCores();
+    int gpu0 = arg0.getGpuCores();
+    int gpu1 = arg1.getGpuCores();
     
-    if(mem0 <= mem1 && cpu0 <= cpu1) { 
+    if(mem0 <= mem1 && cpu0 <= cpu1 && gpu0 <= gpu1) {
       return true;
     }
     return false; 
@@ -263,7 +265,7 @@ public class AMRMClientImpl<T extends ContainerRequest> extends AMRMClient<T> {
         ResourceBlacklistRequest blacklistRequest =
             ResourceBlacklistRequest.newInstance(blacklistToAdd,
                 blacklistToRemove);
-        
+
         allocateRequest =
             AllocateRequest.newInstance(lastResponseId, progressIndicator,
               askList, releaseList, blacklistRequest);
@@ -328,12 +330,12 @@ public class AMRMClientImpl<T extends ContainerRequest> extends AMRMClient<T> {
           // This assumes that there will no concurrent calls to allocate() and
           // so we dont have to worry about ask being changed in the
           // synchronized block at the beginning of this method.
+
           for(ResourceRequest oldAsk : askList) {
             if(!ask.contains(oldAsk)) {
               ask.add(oldAsk);
             }
           }
-          
           blacklistAdditions.addAll(blacklistToAdd);
           blacklistRemovals.addAll(blacklistToRemove);
         }
@@ -532,11 +534,15 @@ public class AMRMClientImpl<T extends ContainerRequest> extends AMRMClient<T> {
     for(Map.Entry<Resource, ResourceRequestInfo> entry : tailMap.entrySet()) {
       if (canFit(entry.getKey(), capability) &&
           !entry.getValue().containerRequests.isEmpty()) {
+        if(entry.getKey().getGpuCores() != capability.getGpuCores()){
+          LOG.warn("The request is " + entry.getKey() +" and the capability is " + capability
+              + "! num of gpu not equal, skip!");
+          continue;
+        }
         // match found that fits in the larger resource
         list.add(entry.getValue().containerRequests);
       }
     }
-    
     // no match found
     return list;          
   }
@@ -655,7 +661,7 @@ public class AMRMClientImpl<T extends ContainerRequest> extends AMRMClient<T> {
     if (reqMap == null) {
       // capabilities are stored in reverse sorted order. smallest last.
       reqMap = new TreeMap<Resource, ResourceRequestInfo>(
-          new ResourceReverseMemoryThenCpuComparator());
+          new ResourceReverseMemoryThenCpuThenGpuComparator());
       remoteRequests.put(resourceName, reqMap);
     }
     ResourceRequestInfo resourceRequestInfo = reqMap.get(capability);

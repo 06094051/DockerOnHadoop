@@ -25,9 +25,12 @@ import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.policies.DominantResourceFairnessPolicy;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.policies.FairSharePolicy;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.policies.FifoPolicy;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.policies.GpuFairSharePolicy;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.policies.GpuFifoPolicy;
 
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Public
@@ -80,7 +83,11 @@ public abstract class SchedulingPolicy {
       clazz = FifoPolicy.class;
     } else if (text.equalsIgnoreCase(DominantResourceFairnessPolicy.NAME)) {
       clazz = DominantResourceFairnessPolicy.class;
-    } else {
+    }else if (text.equalsIgnoreCase(GpuFifoPolicy.NAME)) {
+      clazz = GpuFifoPolicy.class;
+    } else if (text.equalsIgnoreCase(GpuFairSharePolicy.NAME)) {
+      clazz = GpuFairSharePolicy.class;
+    }else {
       try {
         clazz = Class.forName(policy);
       } catch (ClassNotFoundException cnfe) {
@@ -190,5 +197,8 @@ public abstract class SchedulingPolicy {
    */
   public abstract Resource getHeadroom(Resource queueFairShare,
       Resource queueUsage, Resource maxAvailable);
+
+
+  public abstract void computeUsage(Resource totalResource, List<FSAppAttempt> runnableApps);
 
 }

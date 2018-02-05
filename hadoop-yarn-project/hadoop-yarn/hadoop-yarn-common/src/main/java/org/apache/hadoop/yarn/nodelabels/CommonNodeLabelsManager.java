@@ -62,6 +62,7 @@ public class CommonNodeLabelsManager extends AbstractService {
   public static final Set<String> EMPTY_STRING_SET = Collections
       .unmodifiableSet(new HashSet<String>(0));
   public static final String ANY = "*";
+  public static final String NO_LABEL_NODE = "NO_LABEL_NODE";
   public static final Set<String> ACCESS_ANY_LABEL_SET = ImmutableSet.of(ANY);
   private static final Pattern LABEL_PATTERN = Pattern
       .compile("^[0-9a-zA-Z][0-9a-zA-Z-_]*");
@@ -125,7 +126,7 @@ public class CommonNodeLabelsManager extends AbstractService {
     
     protected Node(NodeId nodeid) {
       labels = null;
-      resource = Resource.newInstance(0, 0);
+      resource = Resource.newInstance(0, 0, 0);
       running = false;
       nodeId = nodeid;
     }

@@ -109,7 +109,7 @@ public class DockerContainerExecutor extends ContainerExecutor {
   }
 
   @Override
-  public synchronized void startLocalizer(Path nmPrivateContainerTokensPath,
+  public synchronized void startLocalizer(Container container, Path nmPrivateContainerTokensPath,
                                           InetSocketAddress nmAddr, String user, String appId, String locId,
                                           LocalDirsHandlerService dirsHandler)
     throws IOException, InterruptedException {

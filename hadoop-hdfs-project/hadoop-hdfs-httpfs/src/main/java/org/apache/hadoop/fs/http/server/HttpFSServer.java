@@ -18,6 +18,8 @@
 
 package org.apache.hadoop.fs.http.server;
 
+import com.mtyun.Constants;
+import org.apache.commons.io.FilenameUtils;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
@@ -38,7 +40,6 @@ import org.apache.hadoop.fs.http.server.HttpFSParametersProvider.OffsetParam;
 import org.apache.hadoop.fs.http.server.HttpFSParametersProvider.OperationParam;
 import org.apache.hadoop.fs.http.server.HttpFSParametersProvider.OverwriteParam;
 import org.apache.hadoop.fs.http.server.HttpFSParametersProvider.OwnerParam;
-import org.apache.hadoop.fs.http.server.HttpFSParametersProvider.PermissionParam;
 import org.apache.hadoop.fs.http.server.HttpFSParametersProvider.RecursiveParam;
 import org.apache.hadoop.fs.http.server.HttpFSParametersProvider.ReplicationParam;
 import org.apache.hadoop.fs.http.server.HttpFSParametersProvider.SourcesParam;
@@ -46,6 +47,7 @@ import org.apache.hadoop.fs.http.server.HttpFSParametersProvider.XAttrEncodingPa
 import org.apache.hadoop.fs.http.server.HttpFSParametersProvider.XAttrNameParam;
 import org.apache.hadoop.fs.http.server.HttpFSParametersProvider.XAttrSetFlagParam;
 import org.apache.hadoop.fs.http.server.HttpFSParametersProvider.XAttrValueParam;
+import org.apache.hadoop.fs.http.server.HttpFSParametersProvider.CopyOverwriteParam;
 import org.apache.hadoop.lib.service.FileSystemAccess;
 import org.apache.hadoop.lib.service.FileSystemAccessException;
 import org.apache.hadoop.lib.service.Groups;
@@ -94,6 +96,8 @@ import java.util.Map;
 @InterfaceAudience.Private
 public class HttpFSServer {
   private static Logger AUDIT_LOG = LoggerFactory.getLogger("httpfsaudit");
+
+  public static final Short DEFAULT_PERMISSION = 0700;
 
   /**
    * Executes a {@link FileSystemAccess.FileSystemExecutor} using a filesystem for the effective
@@ -176,6 +180,43 @@ public class HttpFSServer {
     return "/" + ((path != null) ? path : "");
   }
 
+  private String makeAbsolute(String path, UserGroupInformation user) {
+    String userHomeDir = userHomeDir(user);
+    String absolute = FilenameUtils.normalize(userHomeDir + makeAbsolute(path), true);
+    if (absolute == null || !absolute.startsWith(userHomeDir)) {
+      AUDIT_LOG.warn("invalid path {} for user {}", path, user.getUserName());
+      throw new AccessControlException("Invalid Access Path");
+    }
+    return absolute;
+  }
+
+  private String userHomeDir(UserGroupInformation user) {
+    return "/user/" + user.getUserName();
+  }
+
+  private void initUserHome(UserGroupInformation user) {
+    String userHome = userHomeDir(user);
+    FSOperations.FSInitUserHome command =
+            new FSOperations.FSInitUserHome(userHome, DEFAULT_PERMISSION,
+                                            user.getUserName(), defaultUserGroup());
+    try {
+      fsExecute(superUser(), command);
+    } catch (Exception e) {
+      AUDIT_LOG.error("error initUserHome", e);
+    }
+  }
+
+  private UserGroupInformation superUser() {
+    String superUser = HttpFSServerWebApp.get().getConfig().
+            get(Constants.CONF_SUPER_USER, Constants.DEFAULT_SUPER_USER);
+    return UserGroupInformation.createRemoteUser(superUser);
+  }
+
+  private String defaultUserGroup() {
+    return HttpFSServerWebApp.get().getConfig().
+            get(Constants.CONF_USER_GROUP, Constants.DEFAULT_USER_GROUP);
+  }
+
   /**
    * Binding to handle GET requests, supported operations are
    *
@@ -201,9 +242,10 @@ public class HttpFSServer {
     throws IOException, FileSystemAccessException {
     UserGroupInformation user = HttpUserGroupInformation.get();
     Response response;
-    path = makeAbsolute(path);
+    path = makeAbsolute(path, user);
     MDC.put(HttpFSFileSystem.OP_PARAM, op.value().name());
     MDC.put("hostname", request.getRemoteAddr());
+    initUserHome(user);
     switch (op.value()) {
       case OPEN: {
         //Invoking the command directly using an unmanaged FileSystem that is
@@ -268,6 +310,13 @@ public class HttpFSServer {
         response = Response.ok(json).type(MediaType.APPLICATION_JSON).build();
         break;
       }
+      case HOMEUTILS: {
+        String filter = params.get(FilterParam.NAME, FilterParam.class);
+        FSOperations.FSHomeUtils command = new FSOperations.FSHomeUtils(filter);
+        Map json = fsExecute(superUser(), command);
+        response = Response.ok(json).type(MediaType.APPLICATION_JSON).build();
+        break;
+      }
       case GETFILECHECKSUM: {
         FSOperations.FSFileChecksum command =
           new FSOperations.FSFileChecksum(path);
@@ -289,11 +338,11 @@ public class HttpFSServer {
         break;
       }
       case GETXATTRS: {
-        List<String> xattrNames = params.getValues(XAttrNameParam.NAME, 
+        List<String> xattrNames = params.getValues(XAttrNameParam.NAME,
             XAttrNameParam.class);
-        XAttrCodec encoding = params.get(XAttrEncodingParam.NAME, 
+        XAttrCodec encoding = params.get(XAttrEncodingParam.NAME,
             XAttrEncodingParam.class);
-        FSOperations.FSGetXAttrs command = new FSOperations.FSGetXAttrs(path, 
+        FSOperations.FSGetXAttrs command = new FSOperations.FSGetXAttrs(path,
             xattrNames, encoding);
         @SuppressWarnings("rawtypes")
         Map json = fsExecute(user, command);
@@ -344,9 +393,10 @@ public class HttpFSServer {
     throws IOException, FileSystemAccessException {
     UserGroupInformation user = HttpUserGroupInformation.get();
     Response response;
-    path = makeAbsolute(path);
+    path = makeAbsolute(path, user);
     MDC.put(HttpFSFileSystem.OP_PARAM, op.value().name());
     MDC.put("hostname", request.getRemoteAddr());
+    initUserHome(user);
     switch (op.value()) {
       case DELETE: {
         Boolean recursive =
@@ -355,6 +405,20 @@ public class HttpFSServer {
         FSOperations.FSDelete command =
           new FSOperations.FSDelete(path, recursive);
         JSONObject json = fsExecute(user, command);
+        response = Response.ok(json).type(MediaType.APPLICATION_JSON).build();
+        break;
+      }
+      case CLEAN: {
+        String userHome;
+        String owner = params.get(OwnerParam.NAME, OwnerParam.class);
+        if (owner == null) {
+          userHome = userHomeDir(user);
+        } else {
+          userHome = "/user/" + owner;
+        }
+        AUDIT_LOG.info("cleaning up [{}]", userHome);
+        FSOperations.FSCleanDir command = new FSOperations.FSCleanDir(userHome);
+        JSONObject json = fsExecute(superUser(), command);
         response = Response.ok(json).type(MediaType.APPLICATION_JSON).build();
         break;
       }
@@ -397,9 +461,10 @@ public class HttpFSServer {
     throws IOException, FileSystemAccessException {
     UserGroupInformation user = HttpUserGroupInformation.get();
     Response response;
-    path = makeAbsolute(path);
+    path = makeAbsolute(path, user);
     MDC.put(HttpFSFileSystem.OP_PARAM, op.value().name());
     MDC.put("hostname", request.getRemoteAddr());
+    initUserHome(user);
     switch (op.value()) {
       case APPEND: {
         Boolean hasData = params.get(DataParam.NAME, DataParam.class);
@@ -492,9 +557,10 @@ public class HttpFSServer {
     throws IOException, FileSystemAccessException {
     UserGroupInformation user = HttpUserGroupInformation.get();
     Response response;
-    path = makeAbsolute(path);
+    path = makeAbsolute(path, user);
     MDC.put(HttpFSFileSystem.OP_PARAM, op.value().name());
     MDC.put("hostname", request.getRemoteAddr());
+    initUserHome(user);
     switch (op.value()) {
       case CREATE: {
         Boolean hasData = params.get(DataParam.NAME, DataParam.class);
@@ -503,8 +569,7 @@ public class HttpFSServer {
             createUploadRedirectionURL(uriInfo,
               HttpFSFileSystem.Operation.CREATE)).build();
         } else {
-          Short permission = params.get(PermissionParam.NAME,
-                                         PermissionParam.class);
+          Short permission = DEFAULT_PERMISSION;
           Boolean override = params.get(OverwriteParam.NAME,
                                         OverwriteParam.class);
           Short replication = params.get(ReplicationParam.NAME,
@@ -523,11 +588,11 @@ public class HttpFSServer {
         break;
       }
       case SETXATTR: {
-        String xattrName = params.get(XAttrNameParam.NAME, 
+        String xattrName = params.get(XAttrNameParam.NAME,
             XAttrNameParam.class);
-        String xattrValue = params.get(XAttrValueParam.NAME, 
+        String xattrValue = params.get(XAttrValueParam.NAME,
             XAttrValueParam.class);
-        EnumSet<XAttrSetFlag> flag = params.get(XAttrSetFlagParam.NAME, 
+        EnumSet<XAttrSetFlag> flag = params.get(XAttrSetFlagParam.NAME,
             XAttrSetFlagParam.class);
 
         FSOperations.FSSetXAttr command = new FSOperations.FSSetXAttr(
@@ -547,8 +612,7 @@ public class HttpFSServer {
         break;
       }
       case MKDIRS: {
-        Short permission = params.get(PermissionParam.NAME,
-                                       PermissionParam.class);
+        Short permission = DEFAULT_PERMISSION;
         FSOperations.FSMkdirs command =
           new FSOperations.FSMkdirs(path, permission);
         JSONObject json = fsExecute(user, command);
@@ -558,10 +622,21 @@ public class HttpFSServer {
       }
       case RENAME: {
         String toPath = params.get(DestinationParam.NAME, DestinationParam.class);
+        toPath = makeAbsolute(toPath, user);
         FSOperations.FSRename command =
           new FSOperations.FSRename(path, toPath);
         JSONObject json = fsExecute(user, command);
         AUDIT_LOG.info("[{}] to [{}]", path, toPath);
+        response = Response.ok(json).type(MediaType.APPLICATION_JSON).build();
+        break;
+      }
+      case COPY: {
+        String toPath = params.get(DestinationParam.NAME, DestinationParam.class);
+        toPath = makeAbsolute(toPath, user);
+        Boolean overwrite = params.get(CopyOverwriteParam.NAME, CopyOverwriteParam.class);
+        FSOperations.FSCopy command = new FSOperations.FSCopy(path, toPath, overwrite);
+        JSONObject json = fsExecute(user, command);
+        AUDIT_LOG.info("[{}] copy to [{}] overwrite [{}]", path, toPath, overwrite);
         response = Response.ok(json).type(MediaType.APPLICATION_JSON).build();
         break;
       }
@@ -572,16 +647,6 @@ public class HttpFSServer {
           new FSOperations.FSSetOwner(path, owner, group);
         fsExecute(user, command);
         AUDIT_LOG.info("[{}] to (O/G)[{}]", path, owner + ":" + group);
-        response = Response.ok().build();
-        break;
-      }
-      case SETPERMISSION: {
-        Short permission = params.get(PermissionParam.NAME,
-                                      PermissionParam.class);
-        FSOperations.FSSetPermission command =
-          new FSOperations.FSSetPermission(path, permission);
-        fsExecute(user, command);
-        AUDIT_LOG.info("[{}] to [{}]", path, permission);
         response = Response.ok().build();
         break;
       }

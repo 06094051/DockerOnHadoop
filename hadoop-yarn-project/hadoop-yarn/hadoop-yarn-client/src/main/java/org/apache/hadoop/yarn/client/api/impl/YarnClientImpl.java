@@ -42,41 +42,7 @@ import org.apache.hadoop.security.SecurityUtil;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.token.TokenIdentifier;
 import org.apache.hadoop.yarn.api.ApplicationClientProtocol;
-import org.apache.hadoop.yarn.api.protocolrecords.GetApplicationAttemptReportRequest;
-import org.apache.hadoop.yarn.api.protocolrecords.GetApplicationAttemptReportResponse;
-import org.apache.hadoop.yarn.api.protocolrecords.GetApplicationAttemptsRequest;
-import org.apache.hadoop.yarn.api.protocolrecords.GetApplicationAttemptsResponse;
-import org.apache.hadoop.yarn.api.protocolrecords.GetApplicationReportRequest;
-import org.apache.hadoop.yarn.api.protocolrecords.GetApplicationReportResponse;
-import org.apache.hadoop.yarn.api.protocolrecords.GetApplicationsRequest;
-import org.apache.hadoop.yarn.api.protocolrecords.GetApplicationsResponse;
-import org.apache.hadoop.yarn.api.protocolrecords.GetClusterMetricsRequest;
-import org.apache.hadoop.yarn.api.protocolrecords.GetClusterMetricsResponse;
-import org.apache.hadoop.yarn.api.protocolrecords.GetClusterNodeLabelsRequest;
-import org.apache.hadoop.yarn.api.protocolrecords.GetClusterNodesRequest;
-import org.apache.hadoop.yarn.api.protocolrecords.GetClusterNodesResponse;
-import org.apache.hadoop.yarn.api.protocolrecords.GetContainerReportRequest;
-import org.apache.hadoop.yarn.api.protocolrecords.GetContainerReportResponse;
-import org.apache.hadoop.yarn.api.protocolrecords.GetContainersRequest;
-import org.apache.hadoop.yarn.api.protocolrecords.GetContainersResponse;
-import org.apache.hadoop.yarn.api.protocolrecords.GetDelegationTokenRequest;
-import org.apache.hadoop.yarn.api.protocolrecords.GetDelegationTokenResponse;
-import org.apache.hadoop.yarn.api.protocolrecords.GetLabelsToNodesRequest;
-import org.apache.hadoop.yarn.api.protocolrecords.GetNewApplicationRequest;
-import org.apache.hadoop.yarn.api.protocolrecords.GetNewApplicationResponse;
-import org.apache.hadoop.yarn.api.protocolrecords.GetNodesToLabelsRequest;
-import org.apache.hadoop.yarn.api.protocolrecords.GetQueueInfoRequest;
-import org.apache.hadoop.yarn.api.protocolrecords.GetQueueUserAclsInfoRequest;
-import org.apache.hadoop.yarn.api.protocolrecords.KillApplicationRequest;
-import org.apache.hadoop.yarn.api.protocolrecords.KillApplicationResponse;
-import org.apache.hadoop.yarn.api.protocolrecords.MoveApplicationAcrossQueuesRequest;
-import org.apache.hadoop.yarn.api.protocolrecords.ReservationDeleteRequest;
-import org.apache.hadoop.yarn.api.protocolrecords.ReservationDeleteResponse;
-import org.apache.hadoop.yarn.api.protocolrecords.ReservationSubmissionRequest;
-import org.apache.hadoop.yarn.api.protocolrecords.ReservationSubmissionResponse;
-import org.apache.hadoop.yarn.api.protocolrecords.ReservationUpdateRequest;
-import org.apache.hadoop.yarn.api.protocolrecords.ReservationUpdateResponse;
-import org.apache.hadoop.yarn.api.protocolrecords.SubmitApplicationRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.*;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptReport;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
@@ -254,20 +220,20 @@ public class YarnClientImpl extends YarnClient {
 
     int pollCount = 0;
     long startTime = System.currentTimeMillis();
-    EnumSet<YarnApplicationState> waitingStates = 
+    EnumSet<YarnApplicationState> waitingStates =
                                  EnumSet.of(YarnApplicationState.NEW,
                                  YarnApplicationState.NEW_SAVING,
                                  YarnApplicationState.SUBMITTED);
-    EnumSet<YarnApplicationState> failToSubmitStates = 
+    EnumSet<YarnApplicationState> failToSubmitStates =
                                   EnumSet.of(YarnApplicationState.FAILED,
-                                  YarnApplicationState.KILLED);		
+                                  YarnApplicationState.KILLED);
     while (true) {
       try {
         ApplicationReport appReport = getApplicationReport(applicationId);
         YarnApplicationState state = appReport.getYarnApplicationState();
         if (!waitingStates.contains(state)) {
           if(failToSubmitStates.contains(state)) {
-            throw new YarnException("Failed to submit " + applicationId + 
+            throw new YarnException("Failed to submit " + applicationId +
                 " to YARN : " + appReport.getDiagnostics());
           }
           LOG.info("Submitted application " + applicationId);
@@ -411,6 +377,36 @@ public class YarnClientImpl extends YarnClient {
     } catch (InterruptedException e) {
       LOG.error("Interrupted while waiting for application " + applicationId
           + " to be killed.");
+    }
+  }
+
+  @Override
+  public void updateApplicationTBUrl(UpdateTBUrlRequest request) throws YarnException, IOException {
+    GetApplicationReportRequest get = GetApplicationReportRequest.newInstance(request.getApplicationId());
+    int retTimes = 5;
+
+    try {
+      String setUrl = request.getTensorboardUrl();
+      if(setUrl== null || setUrl.length() < 1){
+        LOG.info("Tensorboard is null.");
+        return;
+      }
+      while (retTimes > 0) {
+        rmClient.updateApplicationTBUrl(request);
+        Thread.sleep(500);
+        GetApplicationReportResponse getResp = rmClient.getApplicationReport(get);
+        String getUrl = getResp.getApplicationReport().getTensorboardUrl();
+        if(setUrl.equals(getUrl)){
+          LOG.debug("Set " + request.getApplicationId() + "'s tensorboard url{" + request.getTensorboardUrl() + "} success.");
+          break;
+        }
+        retTimes --;
+      }
+    } catch (InterruptedException e) {
+      LOG.error("Interrupted while waiting for set application tensorboard url.");
+    }
+    if(retTimes <= 0){
+      LOG.info("Set " + request.getApplicationId() + "'s tensorboard url{" + request.getTensorboardUrl() + "} fail.");
     }
   }
 
@@ -774,7 +770,7 @@ public class YarnClientImpl extends YarnClient {
       ReservationDeleteRequest request) throws YarnException, IOException {
     return rmClient.deleteReservation(request);
   }
-  
+
   @Override
   public Map<NodeId, Set<String>> getNodeToLabels() throws YarnException,
       IOException {

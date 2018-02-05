@@ -269,7 +269,7 @@ public class MRApp extends MRAppMaster {
           this.clusterInfo.getMaxContainerCapability());
     } else {
       getContext().getClusterInfo().setMaxContainerCapability(
-          Resource.newInstance(10240, 1));
+          Resource.newInstance(10240, 1, 1));
     }
   }
 
@@ -571,7 +571,7 @@ public class MRApp extends MRAppMaster {
             ContainerId.newContainerId(getContext().getApplicationAttemptId(),
               containerCount++);
         NodeId nodeId = NodeId.newInstance(NM_HOST, NM_PORT);
-        Resource resource = Resource.newInstance(1234, 2);
+        Resource resource = Resource.newInstance(1234, 2, 2);
         ContainerTokenIdentifier containerTokenIdentifier =
             new ContainerTokenIdentifier(cId, nodeId.toString(), "user",
             resource, System.currentTimeMillis() + 10000, 42, 42,

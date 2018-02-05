@@ -83,8 +83,9 @@ public class FSSchedulerNode extends SchedulerNode {
   public synchronized void unreserveResource(
       SchedulerApplicationAttempt application) {
     // Cannot unreserve for wrong application...
-    ApplicationAttemptId reservedApplication = 
-        getReservedContainer().getContainer().getId().getApplicationAttemptId(); 
+   RMContainer reservedContainer= getReservedContainer();
+    ApplicationAttemptId reservedApplication =
+        reservedContainer.getContainer().getId().getApplicationAttemptId();
     if (!reservedApplication.equals(
         application.getApplicationAttemptId())) {
       throw new IllegalStateException("Trying to unreserve " +  

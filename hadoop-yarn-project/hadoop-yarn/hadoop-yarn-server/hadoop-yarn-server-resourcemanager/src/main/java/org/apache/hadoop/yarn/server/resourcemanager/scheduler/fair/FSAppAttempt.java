@@ -31,14 +31,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.classification.InterfaceStability.Unstable;
-import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
-import org.apache.hadoop.yarn.api.records.Container;
-import org.apache.hadoop.yarn.api.records.ContainerId;
-import org.apache.hadoop.yarn.api.records.ContainerStatus;
-import org.apache.hadoop.yarn.api.records.NodeId;
-import org.apache.hadoop.yarn.api.records.Priority;
-import org.apache.hadoop.yarn.api.records.Resource;
-import org.apache.hadoop.yarn.api.records.ResourceRequest;
+import org.apache.hadoop.yarn.api.records.*;
 import org.apache.hadoop.yarn.server.resourcemanager.RMAuditLogger;
 import org.apache.hadoop.yarn.server.resourcemanager.RMAuditLogger.AuditConstants;
 import org.apache.hadoop.yarn.server.resourcemanager.RMContext;
@@ -73,11 +66,10 @@ public class FSAppAttempt extends SchedulerApplicationAttempt
   private ResourceWeights resourceWeights;
   private Resource demand = Resources.createResource(0);
   private FairScheduler scheduler;
-  private Resource fairShare = Resources.createResource(0, 0);
+  private Resource fairShare = Resources.createResource(0, 0, 0);
   private Resource preemptedResources = Resources.createResource(0);
   private RMContainerComparator comparator = new RMContainerComparator();
   private final Map<RMContainer, Long> preemptionMap = new HashMap<RMContainer, Long>();
-
   /**
    * Delay scheduling: We often want to prioritize scheduling of node-local
    * containers over rack-local or off-switch containers. To achieve this
@@ -100,6 +92,17 @@ public class FSAppAttempt extends SchedulerApplicationAttempt
     this.startTime = scheduler.getClock().getTime();
     this.priority = Priority.newInstance(1);
     this.resourceWeights = new ResourceWeights();
+
+    if (rmContext.getRMApps() != null &&
+        rmContext.getRMApps()
+            .containsKey(applicationAttemptId.getApplicationId())) {
+      ApplicationSubmissionContext appSubmissionContext =
+          rmContext.getRMApps().get(applicationAttemptId.getApplicationId())
+              .getApplicationSubmissionContext();
+      if (appSubmissionContext != null && appSubmissionContext.getPriority() != null) {
+        this.priority = appSubmissionContext.getPriority();
+      }
+    }
   }
 
   public ResourceWeights getResourceWeights() {
@@ -416,6 +419,7 @@ public class FSAppAttempt extends SchedulerApplicationAttempt
   public void clearPreemptedResources() {
     preemptedResources.setMemory(0);
     preemptedResources.setVirtualCores(0);
+    preemptedResources.setGpuCores(0);
   }
 
   /**
@@ -495,7 +499,6 @@ public class FSAppAttempt extends SchedulerApplicationAttempt
   private Resource assignContainer(
       FSSchedulerNode node, ResourceRequest request, NodeType type,
       boolean reserved) {
-
     // How much does this request need?
     Resource capability = request.getCapability();
 
@@ -542,6 +545,9 @@ public class FSAppAttempt extends SchedulerApplicationAttempt
         return Resources.none();
       }
 
+      if( getReservedContainers().size() >= getQueue().maxNumReserveContainers){
+        return Resources.none();
+      }
       // The desired container won't fit here, so reserve
       reserve(request.getPriority(), node, container, reserved);
 
@@ -557,7 +563,6 @@ public class FSAppAttempt extends SchedulerApplicationAttempt
     if (LOG.isDebugEnabled()) {
       LOG.debug("Node offered to app: " + getName() + " reserved: " + reserved);
     }
-
     Collection<Priority> prioritiesToTry = (reserved) ?
         Arrays.asList(node.getReservedContainer().getReservedPriority()) :
         getPriorities();
@@ -788,6 +793,7 @@ public class FSAppAttempt extends SchedulerApplicationAttempt
     return assignContainer(node, false);
   }
 
+
   /**
    * Preempt a running container according to the priority
    */
@@ -807,5 +813,9 @@ public class FSAppAttempt extends SchedulerApplicationAttempt
       }
     }
     return toBePreempted;
+  }
+
+  public FairScheduler getScheduler() {
+    return scheduler;
   }
 }

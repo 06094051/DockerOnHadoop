@@ -53,6 +53,7 @@ public class MockRMApp implements RMApp {
   ApplicationId id;
   String url = null;
   String oUrl = null;
+  String tbUrl = null;
   StringBuilder diagnostics = new StringBuilder();
   RMAppAttempt attempt;
   int maxAppAttempts = 1;
@@ -195,6 +196,16 @@ public class MockRMApp implements RMApp {
   public void setOriginalTrackingUrl(String oUrl) {
     this.oUrl = oUrl;
   }
+
+  @Override
+  public String getTensorboardUrl() {
+    return tbUrl;
+  }
+
+  public void setTensorboardUrl(String tbUrl) {
+    this.tbUrl = tbUrl;
+  }
+
 
   @Override
   public StringBuilder getDiagnostics() {

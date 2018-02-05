@@ -121,7 +121,7 @@ public class TestNMReconnect {
   @Test
   public void testReconnect() throws Exception {
     String hostname1 = "localhost1";
-    Resource capability = BuilderUtils.newResource(1024, 1);
+    Resource capability = BuilderUtils.newResource(1024, 1, 1);
 
     RegisterNodeManagerRequest request1 = recordFactory
         .newRecordInstance(RegisterNodeManagerRequest.class);
@@ -140,7 +140,7 @@ public class TestNMReconnect {
 
     rmNodeEvents.clear();
     resourceTrackerService.registerNodeManager(request1);
-    capability = BuilderUtils.newResource(1024, 2);
+    capability = BuilderUtils.newResource(1024, 2, 2);
     request1.setResource(capability);
     Assert.assertEquals(RMNodeEventType.RECONNECTED,
         rmNodeEvents.get(0).getType());

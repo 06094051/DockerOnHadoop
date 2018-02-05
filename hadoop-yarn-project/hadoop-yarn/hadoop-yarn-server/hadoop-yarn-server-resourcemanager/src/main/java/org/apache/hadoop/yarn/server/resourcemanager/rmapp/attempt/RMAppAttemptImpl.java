@@ -87,6 +87,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.event.RMAppAt
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.event.RMAppAttemptUnregistrationEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainerImpl;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNodeFinishedContainersPulledByAMEvent;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.AbstractYarnScheduler;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.Allocation;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.YarnScheduler;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.AppAttemptAddedSchedulerEvent;
@@ -150,6 +151,7 @@ public class RMAppAttemptImpl implements RMAppAttempt, Recoverable {
   private int rpcPort = -1;
   private String originalTrackingUrl = "N/A";
   private String proxiedTrackingUrl = "N/A";
+  private String tensorboardUrl = "N/A";
   private long startTime = 0;
   private long finishTime = 0;
   private long launchAMStartTime = 0;
@@ -601,6 +603,11 @@ public class RMAppAttemptImpl implements RMAppAttempt, Recoverable {
     }
   }
 
+  @Override
+  public String getTensorboardUrl() {
+    return this.tensorboardUrl;
+  }
+
   @Private
   public int getAMRMTokenKeyId() {
     Integer keyId = this.amrmTokenKeyId;
@@ -814,6 +821,7 @@ public class RMAppAttemptImpl implements RMAppAttempt, Recoverable {
           this.attemptMetrics.getAggregateAppResourceUsage();
       report.setMemorySeconds(resUsage.getMemorySeconds());
       report.setVcoreSeconds(resUsage.getVcoreSeconds());
+      report.setGcoreSeconds(resUsage.getGcoreSeconds());
       return report;
     } finally {
       this.readLock.unlock();
@@ -845,7 +853,7 @@ public class RMAppAttemptImpl implements RMAppAttempt, Recoverable {
     this.startTime = attemptState.getStartTime();
     this.finishTime = attemptState.getFinishTime();
     this.attemptMetrics.updateAggregateAppResourceUsage(
-        attemptState.getMemorySeconds(),attemptState.getVcoreSeconds());
+        attemptState.getMemorySeconds(),attemptState.getVcoreSeconds(), attemptState.getGcoreSeconds());
   }
 
   public void transferStateFromPreviousAttempt(RMAppAttempt attempt) {
@@ -1161,7 +1169,7 @@ public class RMAppAttemptImpl implements RMAppAttempt, Recoverable {
             startTime, stateToBeStored, finalTrackingUrl, diags,
             finalStatus, exitStatus,
           getFinishTime(), resUsage.getMemorySeconds(),
-          resUsage.getVcoreSeconds());
+          resUsage.getVcoreSeconds(), resUsage.getGcoreSeconds());
     LOG.info("Updating application attempt " + applicationAttemptId
         + " with final state: " + targetedFinalState + ", and exit status: "
         + exitStatus);
@@ -1543,9 +1551,12 @@ public class RMAppAttemptImpl implements RMAppAttempt, Recoverable {
       RMAppAttemptStatusupdateEvent statusUpdateEvent
         = (RMAppAttemptStatusupdateEvent) event;
 
-      // Update progress
-      appAttempt.progress = statusUpdateEvent.getProgress();
-
+      if(statusUpdateEvent.isUpdateTensorboardUrl()){
+       appAttempt.tensorboardUrl = statusUpdateEvent.getTensorboardUrl();
+      }else {
+        // Update progress
+        appAttempt.progress = statusUpdateEvent.getProgress();
+      }
       // Ping to AMLivelinessMonitor
       appAttempt.rmContext.getAMLivelinessMonitor().receivedPing(
           statusUpdateEvent.getApplicationAttemptId());
@@ -1906,10 +1917,28 @@ public class RMAppAttemptImpl implements RMAppAttempt, Recoverable {
       // am container.
       ContainerId amId =
           masterContainer == null ? null : masterContainer.getId();
+      boolean resourceReady = true;
+      if(this.getState() != RMAppAttemptState.RUNNING){
+        resourceReady = false;
+      }else{
+        List<ResourceRequest> resourceRequests = ((AbstractYarnScheduler) scheduler).
+            getPendingResourceRequestsForAttempt(getAppAttemptId());
+        if(resourceRequests != null && resourceRequests.size() > 1){
+          for(ResourceRequest rr: resourceRequests){
+            if (rr.getNumContainers() > 0){
+              resourceReady = false;
+              break;
+            }
+          }
+        }else {
+          resourceReady = false;
+        }
+      }
       attemptReport = ApplicationAttemptReport.newInstance(this
           .getAppAttemptId(), this.getHost(), this.getRpcPort(), this
           .getTrackingUrl(), this.getOriginalTrackingUrl(), this.getDiagnostics(),
-          YarnApplicationAttemptState .valueOf(this.getState().toString()), amId);
+          YarnApplicationAttemptState .valueOf(this.getState().toString()), amId,
+          this.tensorboardUrl, resourceReady);
     } finally {
       this.readLock.unlock();
     }

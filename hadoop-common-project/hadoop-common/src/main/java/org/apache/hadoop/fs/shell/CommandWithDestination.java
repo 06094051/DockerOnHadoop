@@ -386,11 +386,16 @@ abstract class CommandWithDestination extends FsCommand {
     }
     TargetFileSystem targetFs = new TargetFileSystem(target.fs);
     try {
-      PathData tempTarget = target.suffix("._COPYING_");
-      targetFs.setWriteChecksum(writeChecksum);
-      targetFs.writeStreamToFile(in, tempTarget, lazyPersist);
-      targetFs.rename(tempTarget, target);
-    } finally {
+      if (target.fs.getScheme().startsWith("s3")) {
+        targetFs.setWriteChecksum(writeChecksum);
+        targetFs.writeStreamToFile(in, target, lazyPersist);
+      } else {
+        PathData tempTarget = target.suffix("._COPYING_");
+        targetFs.setWriteChecksum(writeChecksum);
+        targetFs.writeStreamToFile(in, tempTarget, lazyPersist);
+        targetFs.rename(tempTarget, target);
+      }
+    }finally {
       targetFs.close(); // last ditch effort to ensure temp file is removed
     }
   }

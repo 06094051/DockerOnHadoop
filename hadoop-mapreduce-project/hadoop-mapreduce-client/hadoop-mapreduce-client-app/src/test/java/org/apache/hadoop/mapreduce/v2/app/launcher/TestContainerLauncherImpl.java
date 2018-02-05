@@ -410,7 +410,7 @@ public class TestContainerLauncherImpl {
     return MRApp.newContainerToken(NodeId.newInstance("127.0.0.1",
         1234), "password".getBytes(), new ContainerTokenIdentifier(
         contId, containerManagerAddr, "user",
-        Resource.newInstance(1024, 1),
+        Resource.newInstance(1024, 1, 1),
         currentTime + 10000L, 123, currentTime, Priority.newInstance(0), 0));
   }
 

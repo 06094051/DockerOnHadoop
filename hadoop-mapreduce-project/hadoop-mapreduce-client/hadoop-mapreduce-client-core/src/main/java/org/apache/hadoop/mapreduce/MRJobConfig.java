@@ -243,6 +243,9 @@ public interface MRJobConfig {
   public static final String MAP_CPU_VCORES = "mapreduce.map.cpu.vcores";
   public static final int DEFAULT_MAP_CPU_VCORES = 1;
 
+  public static final String MAP_GPU_CORES = "mapreduce.map.gpu.cores";
+  public static final int DEFAULT_MAP_GPU_CORES = 0;
+
   public static final String MAP_ENV = "mapreduce.map.env";
 
   public static final String MAP_JAVA_OPTS = "mapreduce.map.java.opts";
@@ -290,6 +293,9 @@ public interface MRJobConfig {
 
   public static final String REDUCE_CPU_VCORES = "mapreduce.reduce.cpu.vcores";
   public static final int DEFAULT_REDUCE_CPU_VCORES = 1;
+
+  public static final String REDUCE_GPU_CORES = "mapreduce.reduce.gpu.cores";
+  public static final int DEFAULT_REDUCE_GPU_CORES = 0;
 
   public static final String REDUCE_MEMORY_TOTAL_BYTES = "mapreduce.reduce.memory.totalbytes";
 
@@ -475,6 +481,11 @@ public interface MRJobConfig {
   public static final String MR_AM_CPU_VCORES =
     MR_AM_PREFIX+"resource.cpu-vcores";
   public static final int DEFAULT_MR_AM_CPU_VCORES = 1;
+
+  /** The number of virtual cores the MR app master needs.*/
+  public static final String MR_AM_GPU_GCORES =
+    MR_AM_PREFIX+"resource.gpu-cores";
+  public static final int DEFAULT_MR_AM_GPU_GCORES = 0;
 
   /** Command line arguments passed to the MR app master.*/
   public static final String MR_AM_COMMAND_OPTS =

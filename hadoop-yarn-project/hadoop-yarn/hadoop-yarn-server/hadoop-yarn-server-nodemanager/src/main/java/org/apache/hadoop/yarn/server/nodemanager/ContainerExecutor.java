@@ -18,10 +18,7 @@
 
 package org.apache.hadoop.yarn.server.nodemanager;
 
-import java.io.File;
-import java.io.IOException;
-import java.io.OutputStream;
-import java.io.PrintStream;
+import java.io.*;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -38,6 +35,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configurable;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileContext;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.yarn.api.records.ContainerId;
@@ -87,19 +85,19 @@ public abstract class ContainerExecutor implements Configurable {
    * other jars to workaround the CLASSPATH length. In a  secure cluster this 
    * jar must be localized so that the container has access to it. 
    * This function localizes on-demand the jar.
-   * 
+   *
    * @param classPathJar
    * @param owner
    * @throws IOException
    */
-  public Path localizeClasspathJar(Path classPathJar, Path pwd, String owner) 
+  public Path localizeClasspathJar(Path classPathJar, Path pwd, String owner)
       throws IOException {
     // Non-secure executor simply use the classpath created 
     // in the NM fprivate folder
     return classPathJar;
   }
-  
-  
+
+
   /**
    * Prepare the environment for containers in this application to execute.
    * <pre>
@@ -119,7 +117,14 @@ public abstract class ContainerExecutor implements Configurable {
    * @throws IOException For most application init failures
    * @throws InterruptedException If application init thread is halted by NM
    */
-  public abstract void startLocalizer(Path nmPrivateContainerTokens,
+  public void startLocalizer(Path nmPrivateContainerTokens,
+                                      InetSocketAddress nmAddr, String user, String appId, String locId,
+                                      LocalDirsHandlerService dirsHandler)
+      throws IOException, InterruptedException{
+    startLocalizer(null, nmPrivateContainerTokens, nmAddr, user, appId, locId, dirsHandler);
+  }
+
+  public abstract void startLocalizer(Container container, Path nmPrivateContainerTokens,
       InetSocketAddress nmAddr, String user, String appId, String locId,
       LocalDirsHandlerService dirsHandler)
     throws IOException, InterruptedException;
@@ -141,7 +146,7 @@ public abstract class ContainerExecutor implements Configurable {
    */
   public abstract int launchContainer(Container container,
       Path nmPrivateContainerScriptPath, Path nmPrivateTokensPath,
-      String user, String appId, Path containerWorkDir, 
+      String user, String appId, Path containerWorkDir,
       List<String> localDirs, List<String> logDirs) throws IOException;
 
   public abstract boolean signalContainer(String user, String pid,
@@ -154,6 +159,11 @@ public abstract class ContainerExecutor implements Configurable {
   public abstract boolean isContainerProcessAlive(String user, String pid)
       throws IOException;
 
+
+  public void cleanUpImagesAndTmpDir(){
+   LOG.info("Nothing to do.");
+  }
+
   /**
    * Recover an already existing container. This is a blocking call and returns
    * only when the container exits.  Note that the container must have been
@@ -162,7 +172,7 @@ public abstract class ContainerExecutor implements Configurable {
    * @param containerId The ID of the container to reacquire
    * @return The exit code of the pre-existing container
    * @throws IOException
-   * @throws InterruptedException 
+   * @throws InterruptedException
    */
   public int reacquireContainer(String user, ContainerId containerId)
       throws IOException, InterruptedException {
@@ -193,9 +203,9 @@ public abstract class ContainerExecutor implements Configurable {
         LOG.info(containerId + " was deactivated");
         return ExitCode.TERMINATED.getExitCode();
       }
-      
+
       Thread.sleep(sleepMsec);
-      
+
       msecLeft -= sleepMsec;
     }
     if (msecLeft < 0) {
@@ -208,6 +218,11 @@ public abstract class ContainerExecutor implements Configurable {
     } catch (NumberFormatException e) {
       throw new IOException("Error parsing exit code from pid " + pid, e);
     }
+  }
+
+  // 添加该方法主要是为了处理docker container executor，进入容器进入工作目录
+  public void writeLaunchEnv(OutputStream out, Map<String, String> environment, Map<Path, List<String>> resources, List<String> command, String containerWorkDir) throws IOException{
+    this.writeLaunchEnv(out, environment, resources, command);
   }
 
   public void writeLaunchEnv(OutputStream out, Map<String, String> environment, Map<Path, List<String>> resources, List<String> command) throws IOException{
@@ -262,7 +277,7 @@ public abstract class ContainerExecutor implements Configurable {
    * The constants for the signals.
    */
   public enum Signal {
-    NULL(0, "NULL"), QUIT(3, "SIGQUIT"), 
+    NULL(0, "NULL"), QUIT(3, "SIGQUIT"),
     KILL(9, "SIGKILL"), TERM(15, "SIGTERM");
     private final int value;
     private final String str;
@@ -306,8 +321,8 @@ public abstract class ContainerExecutor implements Configurable {
       String userName, Path pidFile, Configuration conf) {
     return getRunCommand(command, groupId, userName, pidFile, conf, null);
   }
-  
-  /** 
+
+  /**
    *  Return a command to execute the given command in OS shell.
    *  On Windows, the passed in groupId can be used to launch
    *  and associate the given groupId in a process group. On
@@ -316,17 +331,17 @@ public abstract class ContainerExecutor implements Configurable {
   protected String[] getRunCommand(String command, String groupId,
       String userName, Path pidFile, Configuration conf, Resource resource) {
     boolean containerSchedPriorityIsSet = false;
-    int containerSchedPriorityAdjustment = 
+    int containerSchedPriorityAdjustment =
         YarnConfiguration.DEFAULT_NM_CONTAINER_EXECUTOR_SCHED_PRIORITY;
 
-    if (conf.get(YarnConfiguration.NM_CONTAINER_EXECUTOR_SCHED_PRIORITY) != 
+    if (conf.get(YarnConfiguration.NM_CONTAINER_EXECUTOR_SCHED_PRIORITY) !=
         null) {
       containerSchedPriorityIsSet = true;
-      containerSchedPriorityAdjustment = conf 
-          .getInt(YarnConfiguration.NM_CONTAINER_EXECUTOR_SCHED_PRIORITY, 
+      containerSchedPriorityAdjustment = conf
+          .getInt(YarnConfiguration.NM_CONTAINER_EXECUTOR_SCHED_PRIORITY,
           YarnConfiguration.DEFAULT_NM_CONTAINER_EXECUTOR_SCHED_PRIORITY);
     }
-  
+
     if (Shell.WINDOWS) {
       int cpuRate = -1;
       int memory = -1;
@@ -397,7 +412,7 @@ public abstract class ContainerExecutor implements Configurable {
 
   /**
    * Mark the container as active
-   * 
+   *
    * @param containerId
    *          the ContainerId
    * @param pidFilePath
@@ -429,7 +444,7 @@ public abstract class ContainerExecutor implements Configurable {
 
   /**
    * Get the process-identifier for the container
-   * 
+   *
    * @param containerID
    * @return the processid of the container if it has already launched,
    *         otherwise return null
@@ -447,6 +462,23 @@ public abstract class ContainerExecutor implements Configurable {
       LOG.error("Got exception reading pid from pid-file " + pidFile, e);
     }
     return pid;
+  }
+
+  // 将ResourceLocalizationService的renameLocalDir方法移动过来，将usercache filecache，nmPrivate移动为带 _DEL_<TS>的文件夹，
+  // 主要是为了处理 SecureDockerContainerExecutor的情况，移动同时将文件能所有者换成宿主机启动hadoop的用户，要不删除不了。
+  public void renameLocalDirForCleanUp(FileContext lfs, String localDir,
+                             String localSubDir, long currentTimeStamp){
+    try {
+      lfs.rename(new Path(localDir, localSubDir), new Path(
+          localDir, localSubDir + "_DEL_" + currentTimeStamp));
+    } catch (FileNotFoundException ex) {
+      // No need to handle this exception
+      // localSubDir may not be exist
+    } catch (Exception ex) {
+      // Do nothing, just give the warning
+      LOG.warn("Failed to rename the local file under " +
+          localDir + "/" + localSubDir);
+    }
   }
 
   public static class DelayedProcessKiller extends Thread {
@@ -481,6 +513,44 @@ public abstract class ContainerExecutor implements Configurable {
         LOG.warn(message);
         container.handle(new ContainerDiagnosticsUpdateEvent(container
           .getContainerId(), message));
+      }
+    }
+  }
+
+  public static class DelayedCleanPidFilePath extends Thread {
+    private static final String EXIT_CODE_FILE_SUFFIX = ".exitcode";
+
+    private final Path pidFilePath;
+    private final long delay;
+    private final String pid;
+
+    public DelayedCleanPidFilePath(long delay, String pid, Path pidFilePath) {
+      this.pidFilePath = pidFilePath;
+      this.delay = delay;
+      this.pid = pid;
+      setName("clean pid path " + pidFilePath);
+      setDaemon(false);
+    }
+
+    @Override
+    public void run() {
+      try {
+        Thread.sleep(delay);
+        String newPid = null;
+        try {
+          newPid = ProcessIdFileReader.getProcessId(pidFilePath);
+        }catch (Exception e){
+        }
+        // 是相同进程的时候清理pidFilePath文件
+        if(newPid != null && newPid.equals(pid)){
+          FileContext lfs = FileContext.getLocalFSFileContext();
+          lfs.delete(pidFilePath, false);
+          lfs.delete(pidFilePath.suffix(EXIT_CODE_FILE_SUFFIX), false);
+        }
+      } catch (InterruptedException e) {
+        return;
+      } catch (IOException e) {
+        LOG.info("clean pid file path failed.", e);
       }
     }
   }

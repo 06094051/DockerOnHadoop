@@ -1,0 +1,27 @@
+yarn.nodemanager.docker-container-executor.group: sankuai
+yarn-nodemanager.docker-executor.path: /usr/bin/nvidia-docker
+# mos or linux
+container-executor.account.type: mos
+mos.container-executor.group.name: mos
+mos.container-executor.group.id: 8888
+linux.container-executor.group.name: mos
+linux.container-executor.group.id: 8888
+yarn.min.user.id: 10
+yarn.max.user.id: 9999999999
+#
+docker.control.cpu: true
+docker.control.memory: true
+# dir
+yarn.nodemanager.local-dirs:
+- /opt/gh-hadoop/data/nm-local-dir
+yarn.nodemanager.log-dirs:
+- /opt/gh-hadoop/hadoop-1.7.2/logs/userlogs
+# docker
+docker.exec.type: nvidia-docker
+docker.volume.base.python.dir: /opt/Python
+docker.opts.url: unix:///var/run/docker.sock
+docker.timeout: 20
+docker.base.image: tf:base
+# BUILD: 0, PULL: 1, DOCKERFILE: 2, IGNORE:3
+docker.image.get.type: 0
+docker.registry: gh-mos-sigmoid-test02:9000

@@ -56,6 +56,8 @@ message ContainerIdProto {
 message ResourceProto {
   optional int32 memory = 1;
   optional int32 virtual_cores = 2;
+  optional int32 gpu_cores = 3;
+  repeated int32 gpus_info = 4;
 }
 
 message ResourceOptionProto {
@@ -171,6 +173,7 @@ message ApplicationResourceUsageReportProto {
   optional ResourceProto needed_resources = 5;
   optional int64 memory_seconds = 6;
   optional int64 vcore_seconds = 7;
+  optional int64 gcore_seconds = 8;
 }
 
 message ApplicationReportProto {
@@ -194,6 +197,9 @@ message ApplicationReportProto {
   optional string applicationType = 18;
   optional hadoop.common.TokenProto am_rm_token = 19;
   repeated string applicationTags = 20;
+  repeated ResourceRequestProto resourceRequests = 21;
+  optional bool resourcesReady = 22;
+  optional string tensorboardUrl = 23;
 }
 
 message ApplicationAttemptReportProto {
@@ -205,6 +211,8 @@ message ApplicationAttemptReportProto {
   optional YarnApplicationAttemptStateProto yarn_application_attempt_state = 6;
   optional ContainerIdProto am_container_id = 7;
   optional string original_tracking_url = 8;
+  optional bool resourceReady = 9;
+  optional string tensorboard_url = 10;
 }
 
 enum NodeStateProto {

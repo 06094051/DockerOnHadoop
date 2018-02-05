@@ -62,6 +62,9 @@ public class RMAuditLogger {
     public static final String SUBMIT_RESERVATION_REQUEST = "Submit Reservation Request";
     public static final String UPDATE_RESERVATION_REQUEST = "Update Reservation Request";
     public static final String DELETE_RESERVATION_REQUEST = "Delete Reservation Request";
+
+
+    public static final String UPDATE_TBURL_REQUEST = "Delete tensorboard url Request";
   }
 
   /**

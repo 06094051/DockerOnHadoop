@@ -171,6 +171,9 @@ public class YarnConfiguration extends Configuration {
   public static final String RM_SCHEDULER_MINIMUM_ALLOCATION_VCORES =
       YARN_PREFIX + "scheduler.minimum-allocation-vcores";
     public static final int DEFAULT_RM_SCHEDULER_MINIMUM_ALLOCATION_VCORES = 1;
+  public static final String RM_SCHEDULER_MINIMUM_ALLOCATION_GCORES =
+      YARN_PREFIX + "scheduler.minimum-allocation-gcores";
+  public static final int DEFAULT_RM_SCHEDULER_MINIMUM_ALLOCATION_GCORES = 0;
 
   /** Maximum request grant-able by the RM scheduler. */
   public static final String RM_SCHEDULER_MAXIMUM_ALLOCATION_MB =
@@ -179,7 +182,9 @@ public class YarnConfiguration extends Configuration {
   public static final String RM_SCHEDULER_MAXIMUM_ALLOCATION_VCORES =
       YARN_PREFIX + "scheduler.maximum-allocation-vcores";
   public static final int DEFAULT_RM_SCHEDULER_MAXIMUM_ALLOCATION_VCORES = 4;
-
+  public static final String RM_SCHEDULER_MAXIMUM_ALLOCATION_GCORES =
+      YARN_PREFIX + "scheduler.maximum-allocation-gcores";
+  public static final int DEFAULT_RM_SCHEDULER_MAXIMUM_ALLOCATION_GCORES = 8;
   /** Number of threads to handle scheduler interface.*/
   public static final String RM_SCHEDULER_CLIENT_THREAD_COUNT =
     RM_PREFIX + "scheduler.client.thread-count";
@@ -463,6 +468,15 @@ public class YarnConfiguration extends Configuration {
   public static final String RM_HA_IDS = RM_HA_PREFIX + "rm-ids";
   public static final String RM_HA_ID = RM_HA_PREFIX + "id";
 
+  /** Keystone related configs */
+  public static final String RM_KEYSTONE_PREFIX = RM_PREFIX + "keystone.";
+  public static final String RM_KEYSTONE_ENABLED = RM_KEYSTONE_PREFIX + "enabled";
+  public static final boolean DEFAULT_RM_KEYSTONE_ENABLED = false;
+  public static final String RM_KEYSTONE_URL = RM_KEYSTONE_PREFIX + "url";
+  public static final String RM_KEYSTONE_USERNAME = RM_KEYSTONE_PREFIX + "username";
+  public static final String RM_KEYSTONE_PASSWORD = RM_KEYSTONE_PREFIX + "password";
+  public static final String RM_KEYSTONE_REGION = RM_KEYSTONE_PREFIX + "region";
+
   /** Store the related configuration files in File System */
   public static final String FS_BASED_RM_CONF_STORE = RM_PREFIX
       + "configuration.file-system-based-store";
@@ -706,8 +720,13 @@ public class YarnConfiguration extends Configuration {
   /** Interval in between cache cleanups.*/
   public static final String NM_LOCALIZER_CACHE_CLEANUP_INTERVAL_MS =
     NM_PREFIX + "localizer.cache.cleanup.interval-ms";
-  public static final long DEFAULT_NM_LOCALIZER_CACHE_CLEANUP_INTERVAL_MS = 
+  public static final long DEFAULT_NM_LOCALIZER_CACHE_CLEANUP_INTERVAL_MS =
     10 * 60 * 1000;
+
+  public static final String NM_LOCALIZER_CLEANUP_IMAGE_TMPDIR_INTERVAL_MS =
+      NM_PREFIX + "localizer.cleanup.image.tempdir.interval-ms";
+  public static final long DEFAULT_NM_LOCALIZER_CLEANUP_IMAGE_TMPDIR_INTERVAL_MS =
+     24 * 60 * 60 * 1000;
   
   /**
    * Target size of localizer cache in MB, per nodemanager. It is a target
@@ -838,13 +857,27 @@ public class YarnConfiguration extends Configuration {
   /** Number of Virtual CPU Cores which can be allocated for containers.*/
   public static final String NM_VCORES = NM_PREFIX + "resource.cpu-vcores";
   public static final int DEFAULT_NM_VCORES = 8;
+  public static final String NM_GCORES = NM_PREFIX + "resource.gcores";
+  public static final int DEFAULT_NM_GCORES = 0;
 
   /** Percentage of overall CPU which can be allocated for containers. */
   public static final String NM_RESOURCE_PERCENTAGE_PHYSICAL_CPU_LIMIT =
       NM_PREFIX + "resource.percentage-physical-cpu-limit";
   public static final int DEFAULT_NM_RESOURCE_PERCENTAGE_PHYSICAL_CPU_LIMIT =
       100;
-  
+  public static final String NM_RESOURCE_PERCENTAGE_GPU_LIMIT =
+      NM_PREFIX + "resource.percentage-gpu-limit";
+  public static final int DEFAULT_NM_RESOURCE_PERCENTAGE_GPU_LIMIT = 100;
+
+  //TODO 暂时是在Yarn 中读取，
+  public static final String NM_RESERVE_MEMORY_PER_GCORE = NM_PREFIX + "reserve.memory-mb.per-gcore";
+  public static final String NM_RESERVE_MEMORY_BASE_GCORE = NM_PREFIX + "reserve.memory-mb.base-gcore";
+
+  public static final String NM_RESERVE_VCORES_PER_GCORE = NM_PREFIX + "reserve.vcores.per-gcore";
+  public static final String NM_RESERVE_VCORES_BASE_GCORE = NM_PREFIX + "reserve.vcores.base-gcore";
+  public static final String NM_MAX_CONTINER_PER_NODE = NM_PREFIX + "max.container.per-node";
+
+
   /** NM Webapp address.**/
   public static final String NM_WEBAPP_ADDRESS = NM_PREFIX + "webapp.address";
   public static final int DEFAULT_NM_WEBAPP_PORT = 8042;
@@ -981,9 +1014,18 @@ public class YarnConfiguration extends Configuration {
   public static final String NM_DOCKER_CONTAINER_EXECUTOR_EXEC_NAME =
     NM_PREFIX + "docker-container-executor.exec-name";
 
+  public static final String NM_DOCKER_CONTAINER_EXECUTOR_FILE_PATH =
+      NM_PREFIX + "docker-container-executor.exec.path";
+
+  public static final String NM_DOCKER_CONTAINER_EXECUTOR_CONF_FILE_PATH =
+      NM_PREFIX + "docker-container-executor.exec.conf.path";
+
   /** The default docker executor (For DockerContainerExecutor).*/
   public static final String NM_DEFAULT_DOCKER_CONTAINER_EXECUTOR_EXEC_NAME =
           "/usr/bin/docker";
+
+  public static final String NM_DEFAULT_DOCKER_CONTAINER_EXECUTOR_CONF_FILE_PATH =
+      "/etc/docker_container_executor.yml";
 
   /** The path to the Linux container executor.*/
   public static final String NM_LINUX_CONTAINER_EXECUTOR_PATH =

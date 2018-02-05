@@ -229,7 +229,7 @@ public class LocalizedResource implements EventHandler<ResourceEvent> {
       rsrc.ref.add(container);
       rsrc.dispatcher.getEventHandler().handle(
           new LocalizerResourceRequestEvent(rsrc, req.getVisibility(), ctxt, 
-              req.getLocalResourceRequest().getPattern()));
+              req.getLocalResourceRequest().getPattern(), req.getContainer()));
     }
   }
 

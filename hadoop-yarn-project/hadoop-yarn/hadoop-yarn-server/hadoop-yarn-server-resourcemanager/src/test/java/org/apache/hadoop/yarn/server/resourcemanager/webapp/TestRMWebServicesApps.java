@@ -1303,9 +1303,11 @@ public class TestRMWebServicesApps extends JerseyTestBase {
           WebServicesTestUtils.getXmlString(element, "amContainerLogs"),
           WebServicesTestUtils.getXmlInt(element, "allocatedMB"),
           WebServicesTestUtils.getXmlInt(element, "allocatedVCores"),
+          WebServicesTestUtils.getXmlInt(element, "allocatedGCores"),
           WebServicesTestUtils.getXmlInt(element, "runningContainers"),
           WebServicesTestUtils.getXmlInt(element, "preemptedResourceMB"),
           WebServicesTestUtils.getXmlInt(element, "preemptedResourceVCores"),
+          WebServicesTestUtils.getXmlInt(element, "preemptedResourceGCores"),
           WebServicesTestUtils.getXmlInt(element, "numNonAMContainerPreempted"),
           WebServicesTestUtils.getXmlInt(element, "numAMContainerPreempted"));
     }
@@ -1314,7 +1316,7 @@ public class TestRMWebServicesApps extends JerseyTestBase {
   public void verifyAppInfo(JSONObject info, RMApp app) throws JSONException,
       Exception {
 
-    assertEquals("incorrect number of elements", 27, info.length());
+    assertEquals("incorrect number of elements", 30, info.length());
 
     verifyAppInfoGeneric(app, info.getString("id"), info.getString("user"),
         info.getString("name"), info.getString("applicationType"),
@@ -1324,10 +1326,10 @@ public class TestRMWebServicesApps extends JerseyTestBase {
         info.getLong("clusterId"), info.getLong("startedTime"),
         info.getLong("finishedTime"), info.getLong("elapsedTime"),
         info.getString("amHostHttpAddress"), info.getString("amContainerLogs"),
-        info.getInt("allocatedMB"), info.getInt("allocatedVCores"),
+        info.getInt("allocatedMB"), info.getInt("allocatedVCores"), info.getInt("allocatedGCores"),
         info.getInt("runningContainers"), 
         info.getInt("preemptedResourceMB"),
-        info.getInt("preemptedResourceVCores"),
+        info.getInt("preemptedResourceVCores"), info.getInt("preemptedResourceGCores"),
         info.getInt("numNonAMContainerPreempted"),
         info.getInt("numAMContainerPreempted"));
   }
@@ -1337,8 +1339,8 @@ public class TestRMWebServicesApps extends JerseyTestBase {
       String finalStatus, float progress, String trackingUI,
       String diagnostics, long clusterId, long startedTime, long finishedTime,
       long elapsedTime, String amHostHttpAddress, String amContainerLogs,
-      int allocatedMB, int allocatedVCores, int numContainers,
-      int preemptedResourceMB, int preemptedResourceVCores,
+      int allocatedMB, int allocatedVCores, int allocatedGCores, int numContainers,
+      int preemptedResourceMB, int preemptedResourceVCores, int preemptedResourceGCores,
       int numNonAMContainerPreempted, int numAMContainerPreempted) throws JSONException,
       Exception {
 
@@ -1373,6 +1375,7 @@ public class TestRMWebServicesApps extends JerseyTestBase {
         amContainerLogs.endsWith("/" + app.getUser()));
     assertEquals("allocatedMB doesn't match", 1024, allocatedMB);
     assertEquals("allocatedVCores doesn't match", 1, allocatedVCores);
+    assertEquals("allocatedGCores doesn't match", 0, allocatedGCores);
     assertEquals("numContainers doesn't match", 1, numContainers);
     assertEquals("preemptedResourceMB doesn't match", app
         .getRMAppMetrics().getResourcePreempted().getMemory(),
@@ -1380,6 +1383,9 @@ public class TestRMWebServicesApps extends JerseyTestBase {
     assertEquals("preemptedResourceVCores doesn't match", app
         .getRMAppMetrics().getResourcePreempted().getVirtualCores(),
         preemptedResourceVCores);
+    assertEquals("preemptedResourceGCores doesn't match", app
+        .getRMAppMetrics().getResourcePreempted().getGpuCores(),
+        preemptedResourceGCores);
     assertEquals("numNonAMContainerPreempted doesn't match", app
         .getRMAppMetrics().getNumNonAMContainersPreempted(),
         numNonAMContainerPreempted);

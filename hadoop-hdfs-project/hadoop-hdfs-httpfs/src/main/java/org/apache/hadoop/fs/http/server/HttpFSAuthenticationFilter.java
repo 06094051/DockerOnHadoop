@@ -17,11 +17,14 @@
  */
 package org.apache.hadoop.fs.http.server;
 
+import com.mtyun.Constants;
 import org.apache.commons.io.Charsets;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.security.authentication.server.AuthenticationFilter;
 import org.apache.hadoop.security.token.delegation.web.DelegationTokenAuthenticationFilter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.servlet.FilterConfig;
 import javax.servlet.ServletException;
@@ -40,6 +43,8 @@ import java.util.Properties;
 @InterfaceAudience.Private
 public class HttpFSAuthenticationFilter
     extends DelegationTokenAuthenticationFilter {
+
+  private static Logger LOG = LoggerFactory.getLogger(HttpFSAuthenticationFilter.class);
 
   private static final String CONF_PREFIX = "httpfs.authentication.";
 
@@ -91,6 +96,12 @@ public class HttpFSAuthenticationFilter
       props.setProperty(AuthenticationFilter.SIGNATURE_SECRET, secret.toString());
     } catch (IOException ex) {
       throw new RuntimeException("Could not read HttpFS signature secret file: " + signatureSecretFile);
+    }
+    String authType = props.getProperty(AUTH_TYPE);
+    LOG.info("HttpFS authType is {}", authType);
+    if (Constants.AUTH_TYPE_KEYSTONE.equals(authType)) {
+      // For AuthenticationFilter#init(), AuthenticationFilter#initializeAuthHandler()
+      props.setProperty(AUTH_TYPE, KeystoneAuthenticationHandler.class.getName());
     }
     return props;
   }

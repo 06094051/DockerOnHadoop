@@ -224,7 +224,7 @@ public class TestContainerManagerSecurity extends KerberosSecurityTestcase {
      */
     YarnRPC rpc = YarnRPC.create(conf);
     String user = "test";
-    Resource r = Resource.newInstance(1024, 1);
+    Resource r = Resource.newInstance(1024, 1, 1);
 
     ApplicationId appId = ApplicationId.newInstance(1, 1);
     ApplicationAttemptId validAppAttemptId =
@@ -657,7 +657,7 @@ public class TestContainerManagerSecurity extends KerberosSecurityTestcase {
         yarnCluster.getResourceManager().getRMContext().
             getContainerTokenSecretManager();
     
-    Resource r = Resource.newInstance(1230, 2);
+    Resource r = Resource.newInstance(1230, 2, 2);
     
     Token containerToken = 
         containerTokenSecretManager.createContainerToken(

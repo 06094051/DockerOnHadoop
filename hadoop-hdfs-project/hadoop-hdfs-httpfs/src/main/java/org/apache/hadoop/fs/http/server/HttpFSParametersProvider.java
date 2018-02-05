@@ -57,6 +57,7 @@ public class HttpFSParametersProvider extends ParametersProvider {
     PARAMS_DEF.put(Operation.LISTSTATUS, new Class[]{FilterParam.class});
     PARAMS_DEF.put(Operation.GETHOMEDIRECTORY, new Class[]{});
     PARAMS_DEF.put(Operation.GETCONTENTSUMMARY, new Class[]{});
+    PARAMS_DEF.put(Operation.HOMEUTILS, new Class[]{FilterParam.class});
     PARAMS_DEF.put(Operation.GETFILECHECKSUM, new Class[]{});
     PARAMS_DEF.put(Operation.GETFILEBLOCKLOCATIONS, new Class[]{});
     PARAMS_DEF.put(Operation.GETACLSTATUS, new Class[]{});
@@ -69,6 +70,8 @@ public class HttpFSParametersProvider extends ParametersProvider {
                   ReplicationParam.class, BlockSizeParam.class, DataParam.class});
     PARAMS_DEF.put(Operation.MKDIRS, new Class[]{PermissionParam.class});
     PARAMS_DEF.put(Operation.RENAME, new Class[]{DestinationParam.class});
+    PARAMS_DEF.put(Operation.COPY,
+      new Class[]{DestinationParam.class, CopyOverwriteParam.class});
     PARAMS_DEF.put(Operation.SETOWNER,
         new Class[]{OwnerParam.class, GroupParam.class});
     PARAMS_DEF.put(Operation.SETPERMISSION, new Class[]{PermissionParam.class});
@@ -77,6 +80,7 @@ public class HttpFSParametersProvider extends ParametersProvider {
     PARAMS_DEF.put(Operation.SETTIMES,
         new Class[]{ModifiedTimeParam.class, AccessTimeParam.class});
     PARAMS_DEF.put(Operation.DELETE, new Class[]{RecursiveParam.class});
+    PARAMS_DEF.put(Operation.CLEAN, new Class[]{OwnerParam.class});
     PARAMS_DEF.put(Operation.SETACL, new Class[]{AclPermissionParam.class});
     PARAMS_DEF.put(Operation.REMOVEACL, new Class[]{});
     PARAMS_DEF.put(Operation.MODIFYACLENTRIES,
@@ -325,6 +329,16 @@ public class HttpFSParametersProvider extends ParametersProvider {
      */
     public OverwriteParam() {
       super(NAME, true);
+    }
+  }
+
+  @InterfaceAudience.Private
+  public static class CopyOverwriteParam extends BooleanParam {
+
+    public static final String NAME = HttpFSFileSystem.OVERWRITE_PARAM;
+
+    public CopyOverwriteParam() {
+      super(NAME, false);
     }
   }
 

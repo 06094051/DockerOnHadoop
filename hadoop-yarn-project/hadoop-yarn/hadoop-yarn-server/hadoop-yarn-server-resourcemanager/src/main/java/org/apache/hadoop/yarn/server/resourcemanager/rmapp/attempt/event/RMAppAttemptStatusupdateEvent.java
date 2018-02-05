@@ -25,15 +25,30 @@ import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttemptE
 public class RMAppAttemptStatusupdateEvent extends RMAppAttemptEvent {
 
   private final float progress;
+  private final String tensorboardUrl;
+  private final boolean updateTensorboardUrl;
 
   public RMAppAttemptStatusupdateEvent(ApplicationAttemptId appAttemptId,
       float progress) {
     super(appAttemptId, RMAppAttemptEventType.STATUS_UPDATE);
     this.progress = progress;
+    this.tensorboardUrl = null;
+    this.updateTensorboardUrl = false;
   }
+
+  public RMAppAttemptStatusupdateEvent(ApplicationAttemptId appAttemptId, String tensorboardUrl) {
+    super(appAttemptId, RMAppAttemptEventType.STATUS_UPDATE);
+    this.progress = 10;
+    this.tensorboardUrl = tensorboardUrl;
+    this.updateTensorboardUrl = true;
+  }
+
 
   public float getProgress() {
     return this.progress;
   }
+
+  public String getTensorboardUrl(){return this.tensorboardUrl;}
+  public boolean isUpdateTensorboardUrl(){return this.updateTensorboardUrl;}
 
 }

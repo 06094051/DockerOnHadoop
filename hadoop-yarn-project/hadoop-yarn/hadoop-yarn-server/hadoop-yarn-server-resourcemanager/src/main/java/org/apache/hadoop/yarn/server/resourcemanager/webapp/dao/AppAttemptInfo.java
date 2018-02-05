@@ -23,12 +23,16 @@ import javax.xml.bind.annotation.XmlRootElement;
 
 import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.yarn.api.records.Container;
+import org.apache.hadoop.yarn.api.records.ResourceRequest;
 import org.apache.hadoop.yarn.server.resourcemanager.ResourceManager;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttempt;
+import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttemptState;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.AbstractYarnScheduler;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerApplicationAttempt;
 import org.apache.hadoop.yarn.util.ConverterUtils;
 import org.apache.hadoop.yarn.webapp.util.WebAppUtils;
+
+import java.util.List;
 
 @XmlRootElement(name = "appAttempt")
 @XmlAccessorType(XmlAccessType.FIELD)
@@ -41,6 +45,11 @@ public class AppAttemptInfo {
   protected String nodeId;
   protected String logsLink;
   protected String blacklistedNodes;
+
+
+  protected List<ResourceRequest> resourceRequests;
+  protected boolean resourcesReady = true;
+  protected String tensorboardUrl;
 
   public AppAttemptInfo() {
   }
@@ -75,7 +84,34 @@ public class AppAttemptInfo {
           }
         }
       }
+      this.tensorboardUrl = attempt.getTensorboardUrl();
+      this.resourceRequests = ((AbstractYarnScheduler) rm.getResourceScheduler()).
+          getPendingResourceRequestsForAttempt(attempt.getAppAttemptId());
+      if(attempt.getState() == RMAppAttemptState.RUNNING){
+        if (this.resourceRequests != null && this.resourceRequests.size() > 1) {
+          for (ResourceRequest rr : this.resourceRequests) {
+            if (rr.getNumContainers() > 0)
+              this.resourcesReady = false;
+          }
+        } else {
+          this.resourcesReady = false;
+        }
+      }else{
+        this.resourcesReady = false;
+      }
     }
+  }
+
+  public List<ResourceRequest> getResourceRequests() {
+    return resourceRequests;
+  }
+
+  public boolean isResourcesReady() {
+    return resourcesReady;
+  }
+
+  public String getTensorboardUrl() {
+    return tensorboardUrl;
   }
 
   public int getAttemptId() {

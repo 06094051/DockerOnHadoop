@@ -260,7 +260,7 @@ public class AMLauncher implements Runnable {
       break;
     case CLEANUP:
       try {
-        LOG.info("Cleaning master " + application.getAppAttemptId());
+        LOG.info("Cleaning master " + application.getAppAttemptId() + " state:" + application.getAppAttemptState());
         cleanup();
       } catch(IOException ie) {
         LOG.info("Error cleaning master ", ie);

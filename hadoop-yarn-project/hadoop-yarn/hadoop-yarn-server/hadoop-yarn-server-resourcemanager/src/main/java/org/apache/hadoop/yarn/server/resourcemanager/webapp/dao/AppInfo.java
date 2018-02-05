@@ -82,17 +82,22 @@ public class AppInfo {
   protected String amHostHttpAddress;
   protected int allocatedMB;
   protected int allocatedVCores;
+  protected int allocatedGCores;
   protected int runningContainers;
   protected long memorySeconds;
   protected long vcoreSeconds;
+  protected long gcoreSeconds;
   
   // preemption info fields
   protected int preemptedResourceMB;
   protected int preemptedResourceVCores;
+  protected int preemptedResourceGCores;
   protected int numNonAMContainerPreempted;
   protected int numAMContainerPreempted;
 
   protected List<ResourceRequest> resourceRequests;
+  protected boolean resourcesReady = true;
+  protected String tensorboardUrl;
 
   public AppInfo() {
   } // JAXB needs this
@@ -119,6 +124,7 @@ public class AppInfo {
       } else {
         this.trackingUrlPretty = "UNASSIGNED";
       }
+      this.tensorboardUrl = app.getTensorboardUrl();
       this.applicationId = app.getApplicationId();
       this.applicationType = app.getApplicationType();
       this.appIdNum = String.valueOf(app.getApplicationId().getId());
@@ -160,11 +166,22 @@ public class AppInfo {
             Resource usedResources = resourceReport.getUsedResources();
             allocatedMB = usedResources.getMemory();
             allocatedVCores = usedResources.getVirtualCores();
+            allocatedGCores = usedResources.getGpuCores();
             runningContainers = resourceReport.getNumUsedContainers();
           }
           resourceRequests =
               ((AbstractYarnScheduler) rm.getRMContext().getScheduler())
                 .getPendingResourceRequestsForAttempt(attempt.getAppAttemptId());
+          if(resourceRequests != null && resourceRequests.size() > 1){
+            for(ResourceRequest rr: resourceRequests){
+              if(rr.getNumContainers() > 0 ){
+                resourcesReady = false;
+                break;
+              }
+            }
+          }else{
+            resourcesReady = false;
+          }
         }
       }
 
@@ -178,8 +195,11 @@ public class AppInfo {
           appMetrics.getNumNonAMContainersPreempted();
       preemptedResourceVCores =
           appMetrics.getResourcePreempted().getVirtualCores();
+      preemptedResourceGCores =
+          appMetrics.getResourcePreempted().getGpuCores();
       memorySeconds = appMetrics.getMemorySeconds();
       vcoreSeconds = appMetrics.getVcoreSeconds();
+      gcoreSeconds = appMetrics.getGcoreSeconds();
     }
   }
 
@@ -286,13 +306,21 @@ public class AppInfo {
   public int getAllocatedVCores() {
     return this.allocatedVCores;
   }
-  
+
+  public int getAllocatedGCores() {
+    return this.allocatedGCores;
+  }
+
   public int getPreemptedMB() {
     return preemptedResourceMB;
   }
 
   public int getPreemptedVCores() {
     return preemptedResourceVCores;
+  }
+
+  public int getPreemptedGCores() {
+    return preemptedResourceGCores;
   }
 
   public int getNumNonAMContainersPreempted() {
@@ -309,6 +337,30 @@ public class AppInfo {
 
   public long getVcoreSeconds() {
     return vcoreSeconds;
+  }
+
+  public long getGcoreSeconds() {
+    return gcoreSeconds;
+  }
+
+  public String getTensorboardUrl() {
+    return tensorboardUrl;
+  }
+
+  public void setTensorboardUrl(String tensorboardUrl) {
+    this.tensorboardUrl = tensorboardUrl;
+  }
+
+  public void setResourceRequests(List<ResourceRequest> resourceRequests) {
+    this.resourceRequests = resourceRequests;
+  }
+
+  public boolean isResourcesReady() {
+    return resourcesReady;
+  }
+
+  public void setResourcesReady(boolean resourcesReady) {
+    this.resourcesReady = resourcesReady;
   }
 
   public List<ResourceRequest> getResourceRequests() {

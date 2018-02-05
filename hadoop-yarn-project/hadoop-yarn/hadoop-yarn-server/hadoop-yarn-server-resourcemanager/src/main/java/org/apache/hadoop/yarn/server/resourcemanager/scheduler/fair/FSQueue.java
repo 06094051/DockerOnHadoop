@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Set;
+import java.util.Collections;
 
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.classification.InterfaceStability.Unstable;
@@ -32,8 +33,11 @@ import org.apache.hadoop.yarn.api.records.QueueACL;
 import org.apache.hadoop.yarn.api.records.QueueInfo;
 import org.apache.hadoop.yarn.api.records.QueueState;
 import org.apache.hadoop.yarn.api.records.Resource;
+import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.hadoop.yarn.factories.RecordFactory;
 import org.apache.hadoop.yarn.factory.providers.RecordFactoryProvider;
+import org.apache.hadoop.yarn.nodelabels.CommonNodeLabelsManager;
+import org.apache.hadoop.yarn.server.resourcemanager.nodelabels.RMNodeLabelsManager;
 import org.apache.hadoop.yarn.server.resourcemanager.resource.ResourceWeights;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.Queue;
 import org.apache.hadoop.yarn.util.resource.Resources;
@@ -41,12 +45,13 @@ import org.apache.hadoop.yarn.util.resource.Resources;
 @Private
 @Unstable
 public abstract class FSQueue implements Queue, Schedulable {
-  private Resource fairShare = Resources.createResource(0, 0);
-  private Resource steadyFairShare = Resources.createResource(0, 0);
+
+  private Resource fairShare = Resources.createResource(0, 0, 0);
+  private Resource steadyFairShare = Resources.createResource(0, 0, 0);
   private final String name;
   protected final FairScheduler scheduler;
   private final FSQueueMetrics metrics;
-  
+
   protected final FSParentQueue parent;
   protected final RecordFactory recordFactory =
       RecordFactoryProvider.getRecordFactory(null);
@@ -56,6 +61,12 @@ public abstract class FSQueue implements Queue, Schedulable {
   private long fairSharePreemptionTimeout = Long.MAX_VALUE;
   private long minSharePreemptionTimeout = Long.MAX_VALUE;
   private float fairSharePreemptionThreshold = 0.5f;
+  protected Set<String> accessibleLabels = null;
+  private boolean hasLabels = false;
+
+  protected long reservationWaitTimeMs = 0;
+  protected long maxSkipNumApp = 0;
+  protected long maxNumReserveContainers = 1000;
 
   public FSQueue(String name, FairScheduler scheduler, FSParentQueue parent) {
     this.name = name;
@@ -64,6 +75,11 @@ public abstract class FSQueue implements Queue, Schedulable {
     metrics.setMinShare(getMinShare());
     metrics.setMaxShare(getMaxShare());
     this.parent = parent;
+    if(scheduler.getAllocationConfiguration() != null){
+      accessibleLabels = scheduler.getAllocationConfiguration().getAccessibleNodeLabels(getQueueName());
+    }else{
+      accessibleLabels = Collections.EMPTY_SET;
+    }
   }
   
   public String getName() {
@@ -234,6 +250,44 @@ public abstract class FSQueue implements Queue, Schedulable {
     }
   }
 
+  // default
+  public void updateNodeLabels() {
+    accessibleLabels = scheduler.getAllocationConfiguration().getAccessibleNodeLabels(getName());
+    if (accessibleLabels == null) {
+      accessibleLabels = Collections.EMPTY_SET;
+    }
+     // No label and the "any" label are equivalent
+      hasLabels = !accessibleLabels.isEmpty() &&
+          !accessibleLabels.contains(RMNodeLabelsManager.NO_LABEL);
+
+    for(FSQueue child: getChildQueues()){
+      child.updateNodeLabels();
+    }
+  }
+
+
+  public void resetReservationWaitTimeMs(){
+    this.reservationWaitTimeMs = scheduler.getAllocationConfiguration().getReservationWaitTimeMs(getQueueName());
+    for(FSQueue child : getChildQueues()){
+      child.resetReservationWaitTimeMs();
+    }
+  }
+
+  public void resetMaxSkipNumApp(){
+    this.maxSkipNumApp = scheduler.getAllocationConfiguration().getMaxSkipNumApp(getQueueName());
+    for(FSQueue child : getChildQueues()){
+      child.resetMaxSkipNumApp();
+    }
+  }
+
+  public void resetMaxNumReserveContainers(){
+    this.maxNumReserveContainers = scheduler.getAllocationConfiguration().getMaxNumReserveContainers(getQueueName());
+    for(FSQueue child : getChildQueues()){
+      child.resetMaxNumReserveContainers();
+    }
+  }
+
+
   /**
    * Gets the children of this queue, if any.
    */
@@ -263,7 +317,30 @@ public abstract class FSQueue implements Queue, Schedulable {
         || node.getReservedContainer() != null) {
       return false;
     }
-    return true;
+    return nodeLabelCheck(node.getNodeID());
+  }
+
+  /**
+   * 没有 label 的 node，能接收没有 label 的 queue 任务，或 label 为 NO_LABEL_NODE 的 queue
+   * node 和 queue label's set 有一个 label 相等则 node 可以接收该 queue 中的任务
+   * 其他则不分配
+   * Check if the queue's labels allow it to assign containers on this node.
+   *
+   * @param nodeId the ID of the node to check
+   * @return true if the queue is allowed to assign containers on this node
+   */
+  protected boolean nodeLabelCheck(NodeId nodeId) {
+    // A queue with no label will accept any node
+    Set<String> labelsOnNode = scheduler.getLabelsManager().getLabelsOnNode(nodeId);
+    if(labelsOnNode.isEmpty()){
+      return !hasLabels || getAccessibleNodeLabels().contains(CommonNodeLabelsManager.NO_LABEL_NODE);
+    }
+    for (String queueLabel : getAccessibleNodeLabels()) {
+      if (labelsOnNode.contains(queueLabel)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
@@ -283,7 +360,8 @@ public abstract class FSQueue implements Queue, Schedulable {
   @Override
   public Set<String> getAccessibleNodeLabels() {
     // TODO, add implementation for FS
-    return null;
+    accessibleLabels = scheduler.getAllocationConfiguration().getAccessibleNodeLabels(getQueueName());
+    return accessibleLabels;
   }
   
   @Override
@@ -291,4 +369,6 @@ public abstract class FSQueue implements Queue, Schedulable {
     // TODO, add implementation for FS
     return null;
   }
+
+
 }

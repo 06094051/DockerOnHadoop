@@ -19,32 +19,60 @@
 package org.apache.hadoop.yarn.api.records.impl.pb;
 
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.classification.InterfaceStability.Unstable;
 import org.apache.hadoop.yarn.api.records.Resource;
+import org.apache.hadoop.yarn.proto.YarnProtos;
 import org.apache.hadoop.yarn.proto.YarnProtos.ResourceProto;
 import org.apache.hadoop.yarn.proto.YarnProtos.ResourceProtoOrBuilder;
+
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 @Private
 @Unstable
 public class ResourcePBImpl extends Resource {
+
+  private Set<Integer> gpusInfo = null;
   ResourceProto proto = ResourceProto.getDefaultInstance();
   ResourceProto.Builder builder = null;
   boolean viaProto = false;
   
   public ResourcePBImpl() {
     builder = ResourceProto.newBuilder();
+    ts = System.currentTimeMillis();
   }
 
   public ResourcePBImpl(ResourceProto proto) {
     this.proto = proto;
     viaProto = true;
+    ts = System.currentTimeMillis();
   }
   
   public ResourceProto getProto() {
+    mergeLocalToProto();
     proto = viaProto ? proto : builder.build();
     viaProto = true;
     return proto;
+  }
+
+  private void mergeLocalToProto() {
+    if (viaProto)
+      maybeInitBuilder();
+    mergeLocalToBuilder();
+    proto = builder.build();
+    viaProto = true;
+  }
+
+
+  private void mergeLocalToBuilder() {
+    if (this.gpusInfo != null) {
+      builder.clearGpusInfo();
+      builder.addAllGpusInfo(this.getGpusInfo());
+    }
   }
 
   private void maybeInitBuilder() {
@@ -80,13 +108,55 @@ public class ResourcePBImpl extends Resource {
   }
 
   @Override
+  public int getGpuCores() {
+    ResourceProtoOrBuilder p = viaProto ? proto : builder;
+    return (p.getGpuCores());
+  }
+
+  @Override
+  public void setGpuCores(int gCores) {
+    maybeInitBuilder();
+    builder.setGpuCores((gCores));
+  }
+
+  @Override
+  public Set<Integer> getGpusInfo() {
+    initGpusInfo();
+    return this.gpusInfo;
+  }
+
+  private void initGpusInfo() {
+    if(this.ts < 0){
+      ts = System.currentTimeMillis();
+    }
+    if (this.gpusInfo != null) {
+      return;
+    }
+    ResourceProtoOrBuilder p = viaProto ? proto : builder;
+    this.gpusInfo = new HashSet<Integer>();
+    this.gpusInfo.addAll(p.getGpusInfoList());
+  }
+
+
+  @Override
+  public void setGpusInfo(Set<Integer> gpusInfo) {
+    if(ts < 0){
+      ts = System.currentTimeMillis();
+    }
+    maybeInitBuilder();
+    builder.clearGpusInfo();
+    this.gpusInfo = gpusInfo;
+  }
+
+  @Override
   public int compareTo(Resource other) {
     int diff = this.getMemory() - other.getMemory();
     if (diff == 0) {
       diff = this.getVirtualCores() - other.getVirtualCores();
+      if (diff == 0) {
+        diff = this.getGpuCores() - other.getGpuCores();
+      }
     }
     return diff;
   }
-  
-  
 }  

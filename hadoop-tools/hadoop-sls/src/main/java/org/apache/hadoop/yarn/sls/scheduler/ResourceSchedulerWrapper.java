@@ -343,8 +343,8 @@ public class ResourceSchedulerWrapper
                         List<ResourceRequest> resourceRequests,
                         List<ContainerId> containerIds) throws IOException {
     // update queue information
-    Resource pendingResource = Resources.createResource(0, 0);
-    Resource allocatedResource = Resources.createResource(0, 0);
+    Resource pendingResource = Resources.createResource(0, 0, 0);
+    Resource allocatedResource = Resources.createResource(0, 0, 0);
     String queueName = appQueueMap.get(attemptId.getApplicationId());
     // container requested
     for (ResourceRequest request : resourceRequests) {

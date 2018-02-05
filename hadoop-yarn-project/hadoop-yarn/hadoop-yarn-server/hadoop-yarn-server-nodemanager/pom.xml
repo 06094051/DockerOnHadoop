@@ -168,6 +168,38 @@
 
   <profiles>
     <profile>
+      <id>pyinstaller</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-antrun-plugin</artifactId>
+            <configuration>
+              <skipTests>false</skipTests>
+            </configuration>
+            <executions>
+              <execution>
+                <id>make</id>
+                <phase>compile</phase>
+                <goals><goal>run</goal></goals>
+                <configuration>
+                  <target>
+                    <mkdir dir="${project.build.directory}/pyinstaller/target"/>
+                    <exec executable="pyinstaller" dir="${project.build.directory}/pyinstaller" failonerror="true">
+                      <arg line="-p /usr/lib/python2.7/site-packages/ -F ${basedir}/src/main/python/docker_container_executor.py"/>
+                    </exec>
+                  </target>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+      <activation>
+        <activeByDefault>false</activeByDefault>
+      </activation>
+    </profile>
+    <profile>
       <id>native</id>
       <build>
         <plugins>

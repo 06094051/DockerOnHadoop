@@ -780,6 +780,7 @@ public class TestRMWebServicesAppsModification extends JerseyTestBase {
     appInfo.getContainerLaunchContextInfo().setCredentials(credentials);
     appInfo.getResource().setMemory(1024);
     appInfo.getResource().setvCores(1);
+    appInfo.getResource().setgCores(1);
     appInfo.setApplicationTags(tags);
 
     ClientResponse response =
@@ -878,6 +879,7 @@ public class TestRMWebServicesAppsModification extends JerseyTestBase {
         YarnConfiguration.RM_SCHEDULER_MAXIMUM_ALLOCATION_MB,
         YarnConfiguration.DEFAULT_RM_SCHEDULER_MAXIMUM_ALLOCATION_MB) + 1);
     appInfo.getResource().setvCores(1);
+    appInfo.getResource().setgCores(1);
     response =
         this.constructWebResource(urlPath).accept(acceptMedia)
           .entity(appInfo, contentMedia).post(ClientResponse.class);
@@ -888,6 +890,10 @@ public class TestRMWebServicesAppsModification extends JerseyTestBase {
       rm.getConfig().getInt(
         YarnConfiguration.RM_SCHEDULER_MAXIMUM_ALLOCATION_VCORES,
         YarnConfiguration.DEFAULT_RM_SCHEDULER_MAXIMUM_ALLOCATION_VCORES) + 1);
+    appInfo.getResource().setgCores(
+      rm.getConfig().getInt(
+        YarnConfiguration.RM_SCHEDULER_MAXIMUM_ALLOCATION_GCORES,
+        YarnConfiguration.DEFAULT_RM_SCHEDULER_MAXIMUM_ALLOCATION_GCORES) + 1);
     appInfo.getResource().setMemory(CONTAINER_MB);
     response =
         this.constructWebResource(urlPath).accept(acceptMedia)
@@ -923,6 +929,7 @@ public class TestRMWebServicesAppsModification extends JerseyTestBase {
     appInfo.getContainerLaunchContextInfo().setResources(lr);
     appInfo.getResource().setMemory(1024);
     appInfo.getResource().setvCores(1);
+    appInfo.getResource().setgCores(1);
 
     String body =
         "<?xml version=\"1.0\" encoding=\"UTF-8\" "

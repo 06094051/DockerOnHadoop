@@ -211,7 +211,7 @@ public class TestLocalContainerAllocator {
       when(ctx.getApplicationAttemptId()).thenReturn(attemptId);
       when(ctx.getJob(isA(JobId.class))).thenReturn(job);
       when(ctx.getClusterInfo()).thenReturn(
-        new ClusterInfo(Resource.newInstance(10240, 1)));
+        new ClusterInfo(Resource.newInstance(10240, 1, 0)));
       when(ctx.getEventHandler()).thenReturn(eventHandler);
       return ctx;
     }

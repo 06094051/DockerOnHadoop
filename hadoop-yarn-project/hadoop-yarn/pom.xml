@@ -53,6 +53,7 @@
           <excludes>
             <exclude>conf/slaves</exclude>
             <exclude>conf/container-executor.cfg</exclude>
+            <exclude>conf/docker_container_executor.yml</exclude>
           </excludes>
         </configuration>
       </plugin>

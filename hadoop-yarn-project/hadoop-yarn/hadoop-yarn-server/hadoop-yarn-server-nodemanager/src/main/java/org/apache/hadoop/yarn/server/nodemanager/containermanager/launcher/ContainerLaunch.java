@@ -267,11 +267,11 @@ public class ContainerLaunch implements Callable<Integer> {
         // Sanitize the container's environment
         sanitizeEnv(environment, containerWorkDir, appDirs, containerLogDirs,
           localResources, nmPrivateClasspathJarDir);
-        
+
         // Write out the environment
         exec.writeLaunchEnv(containerScriptOutStream, environment, localResources,
-            launchContext.getCommands());
-        
+            launchContext.getCommands(), containerWorkDir.toString());
+
         // /////////// End of writing out container-script
 
         // /////////// Write out the container-tokens in the nmPrivate space.
@@ -396,11 +396,11 @@ public class ContainerLaunch implements Callable<Integer> {
     }
     
     // however the container process may have already started
-    try {
 
-      // get process id from pid file if available
-      // else if shell is still active, get it from the shell
-      String processId = null;
+    // get process id from pid file if available
+    // else if shell is still active, get it from the shell
+    String processId = null;
+    try {
       if (pidFilePath != null) {
         processId = getContainerPid(pidFilePath);
       }
@@ -438,9 +438,12 @@ public class ContainerLaunch implements Callable<Integer> {
     } finally {
       // cleanup pid file if present
       if (pidFilePath != null) {
-        FileContext lfs = FileContext.getLocalFSFileContext();
-        lfs.delete(pidFilePath, false);
-        lfs.delete(pidFilePath.suffix(EXIT_CODE_FILE_SUFFIX), false);
+        //TODO recover 时，会周期询问每个container的 pidFilePath.exitcode 文件去判断容器退出状态（容器成功则不查询），暂时准备等待10s去清理该文件，
+        // clean 前已经杀死该进程
+        new ContainerExecutor.DelayedCleanPidFilePath(10000, processId, pidFilePath).start();
+//        FileContext lfs = FileContext.getLocalFSFileContext();
+//        lfs.delete(pidFilePath, false);
+//        lfs.delete(pidFilePath.suffix(EXIT_CODE_FILE_SUFFIX), false);
       }
     }
   }
@@ -516,6 +519,12 @@ public class ContainerLaunch implements Callable<Integer> {
 
     public abstract void env(String key, String value) throws IOException;
 
+    public abstract void chdir(String containerWorkDir);
+
+    public final void script(String script){
+      line(script);
+    }
+
     public final void symlink(Path src, Path dst) throws IOException {
       if (!src.isAbsolute()) {
         throw new IOException("Source must be absolute");
@@ -577,6 +586,11 @@ public class ContainerLaunch implements Callable<Integer> {
     }
 
     @Override
+    public void chdir(String containerWorkDir) {
+      line("cd " + containerWorkDir);
+    }
+
+    @Override
     protected void link(Path src, Path dst) throws IOException {
       line("ln -sf \"", src.toUri().getPath(), "\" \"", dst.toString(), "\"");
       errorCheck();
@@ -616,6 +630,11 @@ public class ContainerLaunch implements Callable<Integer> {
     public void env(String key, String value) throws IOException {
       lineWithLenCheck("@set ", key, "=", value);
       errorCheck();
+    }
+
+    @Override
+    public void chdir(String containerWorkDir) {
+      LOG.info("win not impl.");
     }
 
     @Override

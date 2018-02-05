@@ -20,10 +20,12 @@ package org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.policies;
 import java.io.Serializable;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.List;
 
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.classification.InterfaceStability.Unstable;
 import org.apache.hadoop.yarn.api.records.Resource;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.FSAppAttempt;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.FSQueue;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.Schedulable;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.SchedulingPolicy;
@@ -114,7 +116,7 @@ public class FifoPolicy extends SchedulingPolicy {
         queueFairShare.getMemory() - queueUsage.getMemory(), 0);
     Resource headroom = Resources.createResource(
         Math.min(maxAvailable.getMemory(), queueAvailableMemory),
-        maxAvailable.getVirtualCores());
+        maxAvailable.getVirtualCores(), maxAvailable.getGpuCores());
     return headroom;
   }
 
@@ -122,5 +124,13 @@ public class FifoPolicy extends SchedulingPolicy {
   @Override
   public byte getApplicableDepth() {
     return SchedulingPolicy.DEPTH_LEAF;
+  }
+
+
+  @Override
+  public void computeUsage(Resource usage, List<FSAppAttempt> runnableApps){
+    for (FSAppAttempt app : runnableApps) {
+      Resources.addTo(usage, app.getResourceUsage());
+    }
   }
 }

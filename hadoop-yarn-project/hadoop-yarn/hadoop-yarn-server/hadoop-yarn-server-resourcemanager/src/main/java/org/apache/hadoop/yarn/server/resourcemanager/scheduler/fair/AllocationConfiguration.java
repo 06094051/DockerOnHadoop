@@ -21,6 +21,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.Collections;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.security.UserGroupInformation;
@@ -36,7 +37,8 @@ import com.google.common.annotations.VisibleForTesting;
 public class AllocationConfiguration extends ReservationSchedulerConfiguration {
   private static final AccessControlList EVERYBODY_ACL = new AccessControlList("*");
   private static final AccessControlList NOBODY_ACL = new AccessControlList(" ");
-  
+  private final Map<String, Set<String>> accessibleNodeLabels;
+
   // Minimum resource allocation for each queue
   private final Map<String, Resource> minQueueResources;
   // Maximum amount of resources per queue
@@ -51,6 +53,7 @@ public class AllocationConfiguration extends ReservationSchedulerConfiguration {
   final Map<String, Integer> queueMaxApps;
   @VisibleForTesting
   final Map<String, Integer> userMaxApps;
+
   private final int userMaxAppsDefault;
   private final int queueMaxAppsDefault;
 
@@ -82,7 +85,17 @@ public class AllocationConfiguration extends ReservationSchedulerConfiguration {
   private final Map<String, SchedulingPolicy> schedulingPolicies;
   
   private final SchedulingPolicy defaultSchedulingPolicy;
-  
+
+  // 提交任务到Reservation的时间
+  private long defaultReservationWaitTimeMs = 0;
+
+  final Map<String, Long> reservationWaitTimeMs;
+
+  private int defaultMaxSkipNumApp = 0;
+  final Map<String, Integer>  maxSkipNumApps;
+  Map<String, Integer> maxNumReserveContainers;
+  int defaultNumReserveContainers = 1000;
+
   // Policy for mapping apps to queues
   @VisibleForTesting
   QueuePlacementPolicy placementPolicy;
@@ -109,7 +122,14 @@ public class AllocationConfiguration extends ReservationSchedulerConfiguration {
       QueuePlacementPolicy placementPolicy,
       Map<FSQueueType, Set<String>> configuredQueues,
       ReservationQueueConfiguration globalReservationQueueConfig,
-      Set<String> reservableQueues) {
+      Set<String> reservableQueues,
+      Map<String, Set<String>> accessibleNodeLabels,
+      long defaultReservationWaitTimeMs,
+      Map<String, Long> reservationWaitTimeMs,
+      int defaultMaxSkipNumApp,
+      Map<String, Integer>  maxSkipNumApps,
+      int defaultNumReserveContainers,
+      Map<String, Integer> maxNumReserveContainers) {
     this.minQueueResources = minQueueResources;
     this.maxQueueResources = maxQueueResources;
     this.queueMaxApps = queueMaxApps;
@@ -129,6 +149,13 @@ public class AllocationConfiguration extends ReservationSchedulerConfiguration {
     this.globalReservationQueueConfig = globalReservationQueueConfig;
     this.placementPolicy = placementPolicy;
     this.configuredQueues = configuredQueues;
+    this.accessibleNodeLabels = accessibleNodeLabels;
+    this.defaultReservationWaitTimeMs = defaultReservationWaitTimeMs;
+    this.reservationWaitTimeMs = reservationWaitTimeMs;
+    this.defaultMaxSkipNumApp = defaultMaxSkipNumApp;
+    this.maxSkipNumApps = maxSkipNumApps;
+    this.maxNumReserveContainers = maxNumReserveContainers;
+    this.defaultNumReserveContainers = defaultNumReserveContainers;
   }
   
   public AllocationConfiguration(Configuration conf) {
@@ -154,8 +181,23 @@ public class AllocationConfiguration extends ReservationSchedulerConfiguration {
     }
     placementPolicy = QueuePlacementPolicy.fromConfiguration(conf,
         configuredQueues);
+    accessibleNodeLabels = new HashMap<>();
+    this.reservationWaitTimeMs = new HashMap<String, Long>();
+    this.maxSkipNumApps = new HashMap<String, Integer>();
+    this.maxNumReserveContainers = new HashMap<>();
+    this.defaultNumReserveContainers = 1000;
   }
-  
+
+  public Set<String> getAccessibleNodeLabels(String queueName) {
+    if(accessibleNodeLabels.containsKey(queueName))
+      return accessibleNodeLabels.get(queueName);
+    return Collections.EMPTY_SET;
+  }
+
+  public Map<String, Set<String>> getAccessibleNodeLabels() {
+    return accessibleNodeLabels;
+  }
+
   /**
    * Get the ACLs associated with this queue. If a given ACL is not explicitly
    * configured, include the default value for that ACL.  The default for the
@@ -336,5 +378,28 @@ public class AllocationConfiguration extends ReservationSchedulerConfiguration {
   @VisibleForTesting
   public void setAverageCapacity(int avgCapacity) {
     globalReservationQueueConfig.setAverageCapacity(avgCapacity);
+  }
+
+
+  public long getReservationWaitTimeMs(String queueName) {
+    if(this.reservationWaitTimeMs.containsKey(queueName)){
+      return  this.reservationWaitTimeMs.get(queueName);
+    }
+    return this.defaultReservationWaitTimeMs;
+  }
+
+  public int getMaxSkipNumApp(String queueName) {
+    if(this.maxSkipNumApps.containsKey(queueName)){
+      return  this.maxSkipNumApps.get(queueName);
+    }
+    return this.defaultMaxSkipNumApp;
+  }
+
+
+  public int getMaxNumReserveContainers(String queueName) {
+    if(this.maxNumReserveContainers.containsKey(queueName)){
+      return  this.maxNumReserveContainers.get(queueName);
+    }
+    return this.defaultNumReserveContainers;
   }
 }

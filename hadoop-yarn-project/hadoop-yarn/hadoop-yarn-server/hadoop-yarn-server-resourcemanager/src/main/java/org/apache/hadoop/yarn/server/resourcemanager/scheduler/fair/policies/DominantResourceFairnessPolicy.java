@@ -20,12 +20,14 @@ package org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.policies;
 
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.List;
 
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.classification.InterfaceStability.Unstable;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.server.resourcemanager.resource.ResourceType;
 import org.apache.hadoop.yarn.server.resourcemanager.resource.ResourceWeights;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.FSAppAttempt;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.FSQueue;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.Schedulable;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.SchedulingPolicy;
@@ -96,10 +98,13 @@ public class DominantResourceFairnessPolicy extends SchedulingPolicy {
     int queueAvailableCPU =
         Math.max(queueFairShare.getVirtualCores() - queueUsage
             .getVirtualCores(), 0);
+    int queueAvailableGPU =
+        Math.max(queueFairShare.getGpuCores() - queueUsage.getGpuCores(), 0);
     Resource headroom = Resources.createResource(
         Math.min(maxAvailable.getMemory(), queueAvailableMemory),
         Math.min(maxAvailable.getVirtualCores(),
-            queueAvailableCPU));
+            queueAvailableCPU),
+        Math.min(maxAvailable.getGpuCores(), queueAvailableGPU));
     return headroom;
   }
 
@@ -174,15 +179,39 @@ public class DominantResourceFairnessPolicy extends SchedulingPolicy {
           (pool.getMemory() * weights.getWeight(MEMORY)));
       shares.setWeight(CPU, (float)resource.getVirtualCores() /
           (pool.getVirtualCores() * weights.getWeight(CPU)));
+      shares.setWeight(GPU, (float) resource.getGpuCores() /
+          (pool.getGpuCores() * weights.getWeight(GPU)));
       // sort order vector by resource share
       if (resourceOrder != null) {
-        if (shares.getWeight(MEMORY) > shares.getWeight(CPU)) {
-          resourceOrder[0] = MEMORY;
-          resourceOrder[1] = CPU;
-        } else  {
+        int position = 0;
+
+        resourceOrder[0] = MEMORY;
+        position ++;
+
+        if (position == 0) {
           resourceOrder[0] = CPU;
-          resourceOrder[1] = MEMORY;
+        } else {
+          if (shares.getWeight(MEMORY) >= shares.getWeight(CPU)) {
+            resourceOrder[1] = CPU;
+          } else {
+            resourceOrder[0] = CPU;
+            resourceOrder[1] = MEMORY;
+          }
         }
+        position ++;
+
+        int startIndex = 0;
+        while (startIndex < position) {
+          if (shares.getWeight(GPU) >=
+              shares.getWeight(resourceOrder[startIndex])) {
+            break;
+          }
+          startIndex ++;
+        }
+        for (int i = position; i > startIndex; i --) {
+          resourceOrder[i] = resourceOrder[i-1];
+        }
+        resourceOrder[startIndex] = GPU;
       }
     }
     
@@ -198,4 +227,12 @@ public class DominantResourceFairnessPolicy extends SchedulingPolicy {
       return 0;
     }
   }
+
+  @Override
+  public void computeUsage(Resource usage, List<FSAppAttempt> runnableApps){
+    for (FSAppAttempt app : runnableApps) {
+      Resources.addTo(usage, app.getResourceUsage());
+    }
+  }
 }
+

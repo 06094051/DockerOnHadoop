@@ -13,5 +13,22 @@
   limitations under the License.
 -->
 <configuration>
-
+<!--
+  <property>
+    <name>httpfs.authentication.type</name>
+    <value>keystone</value>
+  </property>
+  <property>
+    <name>httpfs.authentication.keystone.url</name>
+    <value>http://keystone-corp.sankuai.com:35357/v2.0</value>
+  </property>
+  <property>
+    <name>httpfs.authentication.keystone.username</name>
+    <value>mclouds</value>
+  </property>
+  <property>
+    <name>httpfs.authentication.keystone.password</name>
+    <value>mclouds</value>
+  </property>
+-->
 </configuration>

@@ -337,6 +337,11 @@ public class YARNRunner implements ClientProtocol {
             MRJobConfig.MR_AM_CPU_VCORES, MRJobConfig.DEFAULT_MR_AM_CPU_VCORES
             )
         );
+    capability.setGpuCores(
+        conf.getInt(
+            MRJobConfig.MR_AM_GPU_GCORES, MRJobConfig.DEFAULT_MR_AM_GPU_GCORES
+            )
+        );
     LOG.debug("AppMaster capability = " + capability);
 
     // Setup LocalResources

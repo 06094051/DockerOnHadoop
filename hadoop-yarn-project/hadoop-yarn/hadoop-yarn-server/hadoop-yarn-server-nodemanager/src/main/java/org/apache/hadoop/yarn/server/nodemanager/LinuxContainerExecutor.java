@@ -196,7 +196,7 @@ public class LinuxContainerExecutor extends ContainerExecutor {
   }
   
   @Override
-  public void startLocalizer(Path nmPrivateContainerTokensPath,
+  public void startLocalizer(Container container, Path nmPrivateContainerTokensPath,
       InetSocketAddress nmAddr, String user, String appId, String locId,
       LocalDirsHandlerService dirsHandler)
       throws IOException, InterruptedException {

@@ -20,12 +20,14 @@ package org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair;
 import java.io.File;
 import java.io.IOException;
 import java.net.URL;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.Collections;
 
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -223,6 +225,9 @@ public class AllocationFileLoaderService extends AbstractService {
     Map<String, Map<QueueACL, AccessControlList>> queueAcls =
         new HashMap<String, Map<QueueACL, AccessControlList>>();
     Set<String> reservableQueues = new HashSet<String>();
+    Map<String, Set<String>> accessibleNodeLabels = new HashMap<>();
+    Map<String, Integer> maxNumReserveContainers = new HashMap<>();
+    int defaultNumReserveContainers = 1000;
     int userMaxAppsDefault = Integer.MAX_VALUE;
     int queueMaxAppsDefault = Integer.MAX_VALUE;
     float queueMaxAMShareDefault = 0.5f;
@@ -235,6 +240,11 @@ public class AllocationFileLoaderService extends AbstractService {
     String planner = null;
     String reservationAgent = null;
     String reservationAdmissionPolicy = null;
+    //
+    long defaultReservationWaitTimeMs = 1;
+    Map<String, Long> reservationWaitTimeMs = new HashMap<>();
+    int defaultMaxSkipNumApp = 0;
+    Map<String, Integer>  maxSkipNumApps = new HashMap<>();
 
     QueuePlacementPolicy newPlacementPolicy = null;
 
@@ -332,7 +342,16 @@ public class AllocationFileLoaderService extends AbstractService {
         } else if ("reservation-policy".equals(element.getTagName())) {
           String text = ((Text) element.getFirstChild()).getData().trim();
           reservationAdmissionPolicy = text;
-        } else {
+        }else if ("defaultReservationWaitTimeMs".equals(element.getTagName())) {
+          String text = ((Text) element.getFirstChild()).getData().trim();
+          defaultReservationWaitTimeMs = Long.parseLong(text);
+        }else if ("defaultMaxSkipNumApp".equals(element.getTagName())) {
+          String text = ((Text) element.getFirstChild()).getData().trim();
+          defaultMaxSkipNumApp = Integer.parseInt(text);
+        }else if("defaultNumReserveContainers".equals(element.getTagName())){
+          String text = ((Text) element.getFirstChild()).getData().trim();
+          defaultNumReserveContainers = Integer.parseInt(text);
+        }else {
           LOG.warn("Bad element in allocations file: " + element.getTagName());
         }
       }
@@ -353,7 +372,7 @@ public class AllocationFileLoaderService extends AbstractService {
           queueMaxApps, userMaxApps, queueMaxAMShares, queueWeights,
           queuePolicies, minSharePreemptionTimeouts, fairSharePreemptionTimeouts,
           fairSharePreemptionThresholds, queueAcls, configuredQueues,
-          reservableQueues);
+          reservableQueues, accessibleNodeLabels, reservationWaitTimeMs, maxSkipNumApps, maxNumReserveContainers);
     }
 
     // Load placement policy and pass it configured queues
@@ -402,8 +421,32 @@ public class AllocationFileLoaderService extends AbstractService {
         minSharePreemptionTimeouts, fairSharePreemptionTimeouts,
         fairSharePreemptionThresholds, queueAcls,
         newPlacementPolicy, configuredQueues, globalReservationQueueConfig,
-        reservableQueues);
-    
+        reservableQueues, accessibleNodeLabels, defaultReservationWaitTimeMs, reservationWaitTimeMs,
+        defaultMaxSkipNumApp, maxSkipNumApps, defaultNumReserveContainers, maxNumReserveContainers);
+
+    LOG.info("reload fair scheduler............");
+    LOG.info("minQueueResources:" + minQueueResources);
+    LOG.info("userMaxAppsDefault:" + userMaxAppsDefault);
+    LOG.info("userMaxApps:" + userMaxApps);
+    LOG.info("queueMaxAMShares:" + queueMaxAMShares);
+    LOG.info("userMaxAppsDefault:" + userMaxAppsDefault);
+    LOG.info("queueMaxAppsDefault:" + queueMaxAppsDefault);
+    LOG.info("minSharePreemptionTimeouts:" + minSharePreemptionTimeouts);
+    LOG.info("fairSharePreemptionTimeouts:" + fairSharePreemptionTimeouts);
+    LOG.info("fairSharePreemptionThresholds:" + fairSharePreemptionThresholds);
+    LOG.info("queueAcls:" + queueAcls);
+    LOG.info("newPlacementPolicy:" + newPlacementPolicy);
+    LOG.info("configuredQueues:" + configuredQueues);
+    LOG.info("globalReservationQueueConfig:" + globalReservationQueueConfig);
+    LOG.info("reservableQueues:" + reservableQueues);
+    LOG.info("accessibleNodeLabels:" + accessibleNodeLabels);
+    LOG.info("defaultReservationWaitTimeMs:" + defaultReservationWaitTimeMs);
+    LOG.info("reservationWaitTimeMs:" + reservationWaitTimeMs);
+    LOG.info("defaultMaxSkipNumApp:" + defaultMaxSkipNumApp);
+    LOG.info("maxSkipNumApps:" + maxSkipNumApps);
+    LOG.info("defaultNumReserveContainers:" + defaultNumReserveContainers);
+    LOG.info("maxNumReserveContainers:" + maxNumReserveContainers);
+
     lastSuccessfulReload = clock.getTime();
     lastReloadAttemptFailed = false;
 
@@ -424,10 +467,13 @@ public class AllocationFileLoaderService extends AbstractService {
       Map<String, Float> fairSharePreemptionThresholds,
       Map<String, Map<QueueACL, AccessControlList>> queueAcls,
       Map<FSQueueType, Set<String>> configuredQueues,
-      Set<String> reservableQueues)
+      Set<String> reservableQueues,
+      Map<String, Set<String>> accessibleNodeLabels,
+      Map<String, Long> reservationWaitTimeMs,
+      Map<String, Integer> maxSkipNumApps,
+      Map<String, Integer> maxNumReserveContainers)
       throws AllocationConfigurationException {
     String queueName = element.getAttribute("name");
-
     if (queueName.contains(".")) {
       throw new AllocationConfigurationException("Bad fair scheduler config "
           + "file: queue name (" + queueName + ") shouldn't contain period.");
@@ -495,13 +541,35 @@ public class AllocationFileLoaderService extends AbstractService {
         isLeaf = false;
         reservableQueues.add(queueName);
         configuredQueues.get(FSQueueType.PARENT).add(queueName);
-      } else if ("queue".endsWith(field.getTagName()) || 
+      }else if("accessibleNodeLabels".equals(field.getTagName())){
+        String[] nodeLabel = ((Text)field.getFirstChild()).getData().trim().split(",");
+        if ((nodeLabel != null) && (nodeLabel.length > 0)) {
+          Set<String> nodeLabelSet = new HashSet<>();
+          for (String label : nodeLabel) {
+            if ((label != null) && (label.length() > 0)) {
+              nodeLabelSet.add(label);
+            }
+          }
+          accessibleNodeLabels.put(queueName, nodeLabelSet);
+        }
+      }else if("reservationWaitTimeMs".equals(field.getTagName())){
+        String text = ((Text) field.getFirstChild()).getData().trim();
+        reservationWaitTimeMs.put(queueName, Long.parseLong(text));
+      } else if("maxSkipNumApp".equals(field.getTagName())){
+        String text = ((Text) field.getFirstChild()).getData().trim();
+        maxSkipNumApps.put(queueName, Integer.parseInt(text));
+      } else if("maxNumReserveContainers".equals(field.getTagName())){
+        String text = ((Text)field.getFirstChild()).getData().trim();
+        int val = Integer.parseInt(text);
+        maxNumReserveContainers.put(queueName, val);
+      } else if ("queue".endsWith(field.getTagName()) ||
           "pool".equals(field.getTagName())) {
         loadQueue(queueName, field, minQueueResources, maxQueueResources,
             queueMaxApps, userMaxApps, queueMaxAMShares, queueWeights,
             queuePolicies, minSharePreemptionTimeouts,
             fairSharePreemptionTimeouts, fairSharePreemptionThresholds,
-            queueAcls, configuredQueues, reservableQueues);
+            queueAcls, configuredQueues, reservableQueues, accessibleNodeLabels, reservationWaitTimeMs, maxSkipNumApps,
+            maxNumReserveContainers);
         isLeaf = false;
       }
     }
@@ -521,6 +589,10 @@ public class AllocationFileLoaderService extends AbstractService {
       }
       configuredQueues.get(FSQueueType.PARENT).add(queueName);
     }
+    if(!accessibleNodeLabels.containsKey(queueName)){
+      accessibleNodeLabels.put(queueName, Collections.EMPTY_SET);
+    }
+
     queueAcls.put(queueName, acls);
     if (maxQueueResources.containsKey(queueName) &&
         minQueueResources.containsKey(queueName)

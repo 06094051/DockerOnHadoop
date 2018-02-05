@@ -179,6 +179,8 @@ public interface RMApp extends EventHandler<RMAppEvent> {
    */
   String getOriginalTrackingUrl();
 
+  String getTensorboardUrl();
+
   /**
    * the diagnostics information for the application master.
    * @return the diagnostics information for the application master.

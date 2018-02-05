@@ -18,11 +18,7 @@
 
 package org.apache.hadoop.yarn.server.resourcemanager.scheduler;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -52,8 +48,8 @@ public abstract class SchedulerNode {
 
   private static final Log LOG = LogFactory.getLog(SchedulerNode.class);
 
-  private Resource availableResource = Resource.newInstance(0, 0);
-  private Resource usedResource = Resource.newInstance(0, 0);
+  private Resource availableResource = Resource.newInstance(0, 0, 0);
+  private Resource usedResource = Resource.newInstance(0, 0, 0);
   private Resource totalResourceCapability;
   private RMContainer reservedContainer;
   private volatile int numContainers;
@@ -67,7 +63,11 @@ public abstract class SchedulerNode {
   private final String nodeName;
   
   private volatile Set<String> labels = null;
-  
+
+  //TODO 需要强制物理机的gpu序号是从0 开始，如果不是，代码需要重新开发
+  // 当前节点gpu信息，暂时用 0-n 表示这 n + 1 块GPU
+  private Set<Integer> totalGPUS = new HashSet<Integer>();
+
   public SchedulerNode(RMNode node, boolean usePortForNodeName,
       Set<String> labels) {
     this.rmNode = node;
@@ -79,6 +79,10 @@ public abstract class SchedulerNode {
       nodeName = rmNode.getHostName();
     }
     this.labels = ImmutableSet.copyOf(labels);
+
+    for(int i = 0; i< totalResourceCapability.getGpuCores(); i++){
+      totalGPUS.add(i);
+    }
   }
 
   public SchedulerNode(RMNode node, boolean usePortForNodeName) {
@@ -97,6 +101,9 @@ public abstract class SchedulerNode {
     this.totalResourceCapability = resource;
     this.availableResource = Resources.subtract(totalResourceCapability,
       this.usedResource);
+    for(int i = 0;i< totalResourceCapability.getGpuCores();i++){
+      totalGPUS.add(i);
+    }
   }
   
   /**
@@ -107,6 +114,11 @@ public abstract class SchedulerNode {
   public NodeId getNodeID() {
     return this.rmNode.getNodeID();
   }
+
+  public Set<Integer> getTotalGPUS() {
+    return totalGPUS;
+  }
+
 
   public String getHttpAddress() {
     return this.rmNode.getHttpAddress();
@@ -147,14 +159,84 @@ public abstract class SchedulerNode {
     Container container = rmContainer.getContainer();
     deductAvailableResource(container.getResource());
     ++numContainers;
-
     launchedContainers.put(container.getId(), rmContainer);
-
+    allocateGPUINFO(rmContainer);
     LOG.info("Assigned container " + container.getId() + " of capacity "
         + container.getResource() + " on host " + rmNode.getNodeAddress()
         + ", which has " + numContainers + " containers, "
         + getUsedResource() + " used and " + getAvailableResource()
         + " available after allocation");
+  }
+
+  /**
+   * 如果出现  need check code ............ 日志，需要跟踪场景，正常情况（或者没有考虑的场景）是没有这种情况发生
+   * @param rmContainer
+   */
+  private void allocateGPUINFO(RMContainer rmContainer){
+    Container container = rmContainer.getContainer();
+    int numGPUS = container.getResource().getGpuCores();
+    //TODO check下申请的gpu 是不是比当前节点最大的gpu个数大，如果大则打印日志，需要检查这种异常场景来源，原则上是不可能有这种情况
+    if(numGPUS > totalResourceCapability.getGpuCores()){
+      LOG.warn(container.getId() + " need " + numGPUS + " larger than " + totalResourceCapability.getGpuCores() + ",need check code ............ ");
+      return;
+    }
+    LOG.info(container.getId() + "  need " + numGPUS + " gpu.");
+    if(numGPUS == 0){
+      LOG.info(container.getId() + "  need 0 gpu, ignore allocate.");
+      return;
+    }
+    // HA recovery 模式 会走这个场景
+    if(numGPUS == container.getResource().getGpusInfo().size()){
+      LOG.info(container.getId() + " has allocate " + container.getResource().getGpusInfo() +". ignore allocate.");
+      return;
+    }
+
+    Set<Integer> usedGPUS = new HashSet<>();
+
+    for(ContainerId containerId : launchedContainers.keySet()){
+      if(!containerId.equals(container.getId())) {
+        LOG.info(getNodeID() + "  has allocated " + launchedContainers.get(containerId).getContainer());
+        usedGPUS.addAll(launchedContainers.get(containerId).getContainer().getResource().getGpusInfo());
+      }else {
+        LOG.info(getNodeID() + "  has allocated " + launchedContainers.get(containerId).getContainer() + " need allocate gpu info.");
+      }
+    }
+    LOG.info(getNodeID() + " has " + totalGPUS + " allocated " + usedGPUS + ". begin allocate gpu info to " + container.getId() + ", need " + numGPUS + " gpu info. ");
+    Set<Integer> info = new HashSet<Integer>();
+    info.addAll(container.getResource().getGpusInfo());
+    //TODO gpu 分配是原子的，需要检查下为什么当前容器的gpu分配了一部分
+    if(info.size() != 0){
+      LOG.warn(container.getId() + "'s gpu info is not empty, need check code ...............");
+      info.clear();
+    }
+    int startIndex = 0;
+    for(Integer i : usedGPUS){
+      if(i > startIndex)
+        startIndex = i;
+    }
+    int maxGPU = totalGPUS.size();
+    //TODO 需要检查下为什么分配了 totalGPUS 没有的gpu序号
+    if(!totalGPUS.containsAll(usedGPUS)){
+      LOG.warn(getNodeID() + " gpu allocate error. allocate: " + usedGPUS + ", total: " + totalGPUS + " need check code ...........");
+    }
+    LOG.info(container.getId() + " begin allocate gpu info resource:" + container.getResource() + " resource hashcode:" + container.getResource().hashCode());
+    while(info.size() < numGPUS){
+      if(!usedGPUS.contains(startIndex % maxGPU)){
+        LOG.info(getNodeID() + " allocate gpu [ " + (startIndex % maxGPU) + " ] to " + container.getId());
+        usedGPUS.add(startIndex % maxGPU);
+        info.add(startIndex % maxGPU);
+      }
+      startIndex ++;
+      if(usedGPUS.size() >= totalGPUS.size()){
+        LOG.info(getNodeID() + " used gpu info " + usedGPUS + " and  total gpu info is "+ totalGPUS );
+        break;
+      }
+    }
+    Resource resource  = Resource.newInstance(container.getResource().getMemory(),container.getResource().getVirtualCores(), container.getResource().getGpuCores());
+    resource.setGpusInfo(info);
+    container.setResource(resource);
+    LOG.info(container.getId() + " allocated Resouce:" + resource + ",  Resource hashcode:" + resource.hashCode());
+    LOG.info(getNodeID() + " has allocate gpu info: " + info + " to " + container.getId()+ ". be allocated "+ usedGPUS);
   }
 
   /**
@@ -218,6 +300,28 @@ public abstract class SchedulerNode {
         + ", which currently has " + numContainers + " containers, "
         + getUsedResource() + " used and " + getAvailableResource()
         + " available" + ", release resources=" + true);
+  }
+
+
+  public Integer[] getRandomGPU(Integer[] array, int count) {
+    Integer[] result = new Integer[count];
+    boolean hasTake[] = new boolean[array.length];
+    Random random = new Random();
+    int m = count;
+    if (m > array.length || m < 0)
+      return array;
+    int n = 0;
+    while (true) {
+      int temp = random.nextInt(array.length);
+      if (!hasTake[temp]) {
+        if (n == m)
+          break;
+        n++;
+        result[n - 1] = array[temp];
+        hasTake[temp] = true;
+      }
+    }
+    return result;
   }
 
   private synchronized void addAvailableResource(Resource resource) {

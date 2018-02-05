@@ -218,6 +218,8 @@ public class TestApplicationHistoryManagerOnTimelineStore {
           applicationResourceUsageReport.getMemorySeconds());
       Assert
           .assertEquals(345, applicationResourceUsageReport.getVcoreSeconds());
+      Assert
+          .assertEquals(345, applicationResourceUsageReport.getGcoreSeconds());
       Assert.assertEquals(FinalApplicationStatus.UNDEFINED,
           app.getFinalApplicationStatus());
       Assert.assertEquals(YarnApplicationState.FINISHED,
@@ -320,7 +322,7 @@ public class TestApplicationHistoryManagerOnTimelineStore {
     Assert.assertNotNull(container);
     Assert.assertEquals(Integer.MAX_VALUE + 1L, container.getCreationTime());
     Assert.assertEquals(Integer.MAX_VALUE + 2L, container.getFinishTime());
-    Assert.assertEquals(Resource.newInstance(-1, -1),
+    Assert.assertEquals(Resource.newInstance(-1, -1, -1),
         container.getAllocatedResource());
     Assert.assertEquals(NodeId.newInstance("test host", 100),
         container.getAssignedNode());
@@ -551,6 +553,7 @@ public class TestApplicationHistoryManagerOnTimelineStore {
     Map<String, Object> entityInfo = new HashMap<String, Object>();
     entityInfo.put(ContainerMetricsConstants.ALLOCATED_MEMORY_ENTITY_INFO, -1);
     entityInfo.put(ContainerMetricsConstants.ALLOCATED_VCORE_ENTITY_INFO, -1);
+    entityInfo.put(ContainerMetricsConstants.ALLOCATED_GCORE_ENTITY_INFO, -1);
     entityInfo.put(ContainerMetricsConstants.ALLOCATED_HOST_ENTITY_INFO,
         "test host");
     entityInfo.put(ContainerMetricsConstants.ALLOCATED_PORT_ENTITY_INFO, 100);
